@@ -1,0 +1,855 @@
+<title>RISC-V Slot Swap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root {
+  --bg: #F2F4F6; --panel: #FFFFFF; --ink: #16202A; --muted: #5B6B7A; --line: #D3DAE1; --grid: #E6EBF0;
+  --static: #2F6690; --static-soft: #DCE7F0; --rp: #B0306F; --rp-soft: #F7DDEA;
+  --ok: #2B7A3D; --warn: #A86200; --warn-soft: #FBEBD2;
+  --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0F161D; --panel: #16202A; --ink: #E2E8EE; --muted: #93A3B2; --line: #2B3A48; --grid: #1E2A35;
+    --static: #72A9D6; --static-soft: #1C3246; --rp: #EE78B2; --rp-soft: #43213A;
+    --ok: #63C07A; --warn: #E3A13B; --warn-soft: #3A2A12;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0F161D; --panel: #16202A; --ink: #E2E8EE; --muted: #93A3B2; --line: #2B3A48; --grid: #1E2A35;
+  --static: #72A9D6; --static-soft: #1C3246; --rp: #EE78B2; --rp-soft: #43213A;
+  --ok: #63C07A; --warn: #E3A13B; --warn-soft: #3A2A12;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--body); padding: 0 20px; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 20px 56px; display: grid; gap: 22px; }
+h1, h2 { font-family: var(--display); font-weight: 700; line-height: 1.1; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 4.6vw, 48px); letter-spacing: -0.01em; }
+h2 { font-size: 22px; }
+.label { font: 600 11px/1.2 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.mono, code { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+p { margin: 0; max-width: 68ch; }
+.muted { color: var(--muted); }
+
+/* header */
+header { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: end; justify-content: space-between; }
+header .sub { color: var(--muted); margin-top: 6px; }
+.badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel); font: 500 13px var(--body); }
+.badge .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.badge.live { border-color: var(--ok); }
+.badge.live .dot { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 25%, transparent); }
+
+/* headline figures */
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line);
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stat { background: var(--panel); padding: 14px 16px; display: grid; gap: 2px; }
+.stat b { font: 700 30px/1 var(--display); font-variant-numeric: tabular-nums; }
+.stat b small { font-size: 17px; font-weight: 600; margin-left: 2px; }
+.stat span { color: var(--muted); font-size: 13px; }
+
+/* main grid */
+.main { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 14px; }
+.panel-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; justify-content: space-between; }
+
+/* answer readout */
+.answer { display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; align-items: center;
+  padding: 14px 16px; border-radius: 8px; background: var(--rp-soft); }
+.answer .big { font: 700 64px/0.9 var(--display); color: var(--rp); font-variant-numeric: tabular-nums; min-width: 1.6ch; text-align: right; transition: transform .25s; }
+.answer .big.flip { transform: scale(1.12); }
+.answer .what { display: grid; gap: 2px; }
+.answer .what strong { font-size: 17px; }
+
+/* controls */
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button { font: 600 14px var(--body); padding: 8px 14px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--ink); }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--static); outline-offset: 2px; }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--rp); border-color: var(--rp); color: var(--panel); }
+button.primary:hover:not(:disabled) { filter: brightness(1.08); border-color: var(--rp); }
+.speed { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.speed input { width: 90px; accent-color: var(--static); }
+
+/* clock stages */
+.stages { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.stage { border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; display: grid; gap: 3px; min-height: 64px; }
+.stage .v { font: 13px/1.35 var(--mono); overflow-wrap: anywhere; }
+.stages.tick .stage { animation: tick .45s ease-out; }
+.stages.tick .stage:nth-child(2) { animation-delay: .06s; } .stages.tick .stage:nth-child(3) { animation-delay: .12s; } .stages.tick .stage:nth-child(4) { animation-delay: .18s; }
+@keyframes tick { from { background: var(--static-soft); } to { background: transparent; } }
+
+/* listing */
+.cpu { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; }
+.listing { font: 12.5px/1 var(--mono); max-height: 438px; overflow: auto; border: 1px solid var(--line); border-radius: 7px; margin: 0; padding: 4px 0; list-style: none; }
+.listing li { display: grid; grid-template-columns: 3.4ch 9ch 1fr; gap: 10px; padding: 4px 10px; white-space: pre; }
+.listing li .a { color: var(--muted); }
+.listing li .h { color: var(--muted); }
+.listing li.cfu .s { color: var(--rp); }
+.listing li.pc { background: var(--static-soft); outline: 1px solid var(--static); outline-offset: -1px; }
+.listing li.nop .s { color: var(--muted); font-style: italic; }
+
+/* registers + memory */
+.side { display: grid; gap: 12px; align-content: start; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+td, th { padding: 3px 6px; text-align: left; border-bottom: 1px solid var(--grid); }
+th { font-weight: 500; color: var(--muted); white-space: nowrap; }
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+td.note { color: var(--muted); font-size: 12px; }
+tr.cfuw td.num { color: var(--rp); }
+tr.dim { opacity: .45; }
+.flash { animation: flash 0.9s ease-out; }
+@keyframes flash { from { background: var(--warn-soft); } to { background: transparent; } }
+.slotbox { border: 1.5px solid var(--rp); border-radius: 7px; padding: 8px 10px; display: grid; gap: 4px; background: var(--rp-soft); }
+.slotbox .row { display: flex; flex-wrap: wrap; gap: 4px 12px; font: 12.5px var(--mono); }
+
+/* floorplan */
+.fp svg { width: 100%; height: auto; display: block; }
+.fp text { font-family: var(--body); }
+.status-line { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 14px; min-height: 26px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font: 600 12px var(--body); border: 1px solid var(--line); }
+.pill.run { color: var(--ok); border-color: var(--ok); }
+.pill.rst { color: var(--ink); border-color: var(--warn); background: var(--warn-soft); }
+.boardres { border: 1px solid var(--ok); background: color-mix(in srgb, var(--ok) 8%, var(--panel)); border-radius: 8px; padding: 8px 12px; font-size: 14px; display: grid; gap: 2px; }
+.boardres.bad { border-color: var(--warn); background: var(--warn-soft); }
+/* user programs + rick */
+.usr { display: grid; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); }
+.prog-row, .rickbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.prog-in { display: inline-flex; gap: 8px; align-items: center; }
+select, textarea, .prog-in input { font: 14px var(--mono); background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; }
+.prog-in input { width: 6.5em; }
+textarea { width: 100%; resize: vertical; line-height: 1.45; tab-size: 4; }
+textarea[readonly] { color: var(--muted); }
+.prog-out table { border-collapse: collapse; font: 13px var(--mono); }
+.prog-out td, .prog-out th { padding: 2px 10px 2px 0; text-align: left; font-weight: 400; }
+.prog-out th { color: var(--muted); }
+.cv { width: 100%; max-width: 512px; aspect-ratio: 4 / 3; image-rendering: pixelated; border: 1px solid var(--line); border-radius: 8px; background: #0b0f14; display: block; }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.path { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; }
+.path label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.log { font: 12.5px/1.6 var(--mono); max-height: 140px; overflow: auto; margin: 0; padding: 0; list-style: none; }
+
+/* chart + q&a */
+.lower { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.chart svg { width: 100%; height: auto; display: block; }
+.chart text { font-family: var(--body); fill: var(--muted); font-size: 11px; }
+.chart .val { fill: var(--ink); font-family: var(--mono); font-size: 11px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.legend i { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+details { border-bottom: 1px solid var(--grid); padding: 8px 0; }
+details summary { cursor: pointer; font-weight: 600; }
+details p { margin-top: 6px; color: var(--muted); font-size: 14px; }
+footer { color: var(--muted); font-size: 13px; }
+
+
+/* build toggle */
+.hdr-r { display: grid; gap: 8px; justify-items: end; }
+.seg { display: inline-flex; padding: 2px; gap: 2px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); }
+.seg label { position: relative; cursor: pointer; }
+.seg input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.seg span { display: block; padding: 6px 12px; border-radius: 7px; font: 600 13px var(--body); color: var(--muted); transition: background .18s, color .18s; }
+.seg input:checked + span { background: var(--rp-soft); color: var(--rp); }
+.seg input:focus-visible + span { outline: 2px solid var(--static); outline-offset: 1px; }
+.seg input:disabled { cursor: not-allowed; }
+.seg input:disabled + span { opacity: .45; }
+.buildnote { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; color: var(--muted); min-height: 24px; }
+.tag { display: inline-flex; align-items: center; gap: 5px; padding: 1px 9px; border-radius: 999px; font: 600 11.5px var(--body); border: 1px solid var(--line); white-space: nowrap; }
+.tag.ok { color: var(--ok); border-color: var(--ok); }
+.tag.pend { color: var(--ink); border-color: var(--warn); background: var(--warn-soft); }   /* ink, not amber: amber on its own tint is 4.06:1 in light mode */
+
+/* swap timeline */
+.tl { display: grid; gap: 8px; padding-top: 4px; border-top: 1px solid var(--grid); }
+.tl-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; align-items: baseline; padding-top: 10px; }
+.tl-bar { display: flex; gap: 2px; height: 28px; }
+.ph { min-width: 6px; border-radius: 3px; transform-origin: left center; background: var(--line); }
+.ph-reset { background: var(--muted); }
+.ph-load { background: var(--rp); }
+.ph-readback { background: var(--static); }
+.ph-re-read, .ph-full-reload { background: var(--warn); }
+.ph-full-reload { background-image: repeating-linear-gradient(135deg, transparent 0 4px, color-mix(in srgb, var(--panel) 50%, transparent) 4px 6px); }
+.tl-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 4px 14px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.tl-legend li { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: baseline; }
+.tl-legend i { width: 10px; height: 10px; border-radius: 2px; align-self: center; }
+.tl-legend b { font: 500 12.5px var(--mono); font-variant-numeric: tabular-nums; }
+
+/* reliability */
+.rel { display: grid; gap: 12px; }
+.relhead { display: grid; gap: 2px; }
+.relhead strong { font-size: 17px; line-height: 1.3; }
+.rb { display: grid; gap: 5px; }
+.rb h3 { margin: 6px 0 0; font: 600 12.5px var(--body); color: var(--muted); }
+.rrow { display: grid; grid-template-columns: minmax(92px, 140px) minmax(0, 1fr) minmax(104px, auto); gap: 10px; align-items: center; font-size: 13px; }
+.trk { position: relative; height: 16px; border-bottom: 1px solid var(--line);
+  background-image: linear-gradient(to right, var(--grid) 1px, transparent 1px); background-size: calc(100% / var(--ax)) 100%; }
+.trk .bar { position: absolute; left: 0; top: 3px; height: 10px; background: var(--static); border-radius: 0 4px 4px 0; transform-origin: left center; }
+.trk .ci { position: absolute; top: 7px; height: 2px; background: var(--ink); }
+.trk .ci::before, .trk .ci::after { content: ""; position: absolute; top: -3px; width: 1px; height: 8px; background: var(--ink); }
+.trk .ci::before { left: 0; } .trk .ci::after { right: 0; }
+.trk .ref { position: absolute; top: -2px; bottom: 0; border-left: 1px dashed var(--muted); }
+.axis { display: flex; justify-content: space-between; font: 11px var(--mono); color: var(--muted); padding-left: calc(min(140px, 28%) + 10px); }
+.strip svg { width: 100%; height: auto; display: block; }
+.strip text { font: 10.5px var(--mono); fill: var(--muted); }
+.keyline { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--muted); }
+.keyline i { display: inline-block; vertical-align: -1px; margin-right: 6px; }
+.k-bar { width: 14px; height: 8px; background: var(--static); border-radius: 0 3px 3px 0; }
+.k-ci { width: 14px; height: 2px; background: var(--ink); vertical-align: 2px !important; }
+.k-ref { width: 0; height: 11px; border-left: 1px dashed var(--muted); }
+.k-miss { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+
+/* board status */
+.sysgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.sysgrid div { background: var(--panel); padding: 8px 10px; display: grid; gap: 2px; }
+.sysgrid b { font: 600 15px var(--mono); font-variant-numeric: tabular-nums; }
+.empty { border: 1px dashed var(--line); border-radius: 8px; padding: 14px; color: var(--muted); font-size: 14px; }
+thead th.num { text-align: right; }
+details.tbl { border: 0; padding: 0; }
+details.tbl summary { font-weight: 500; font-size: 13px; color: var(--muted); }
+details.tbl table { margin-top: 6px; }
+
+@media (max-width: 900px) {
+  .main, .lower, .cpu { grid-template-columns: minmax(0, 1fr); }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .listing { max-height: 260px; }
+}
+@media (max-width: 520px) {
+  .sysgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body { padding: 0 16px; }
+  .stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .answer .big { font-size: 48px; }
+  .hdr-r { justify-items: start; }
+  .rrow { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; margin-bottom: 4px; }
+  .rrow .trk { grid-column: 1 / -1; grid-row: 2; }
+  .axis { padding-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="label">RV32I on Zynq-7020 · dynamic function exchange</div>
+      <h1>One core. One slot. Two accelerators.</h1>
+      <p class="sub">The same program runs on the same static logic. Swapping the partial bitstream in the reconfigurable slot changes the answer.</p>
+    </div>
+    <div class="hdr-r">
+      <span class="badge" id="mode" title="Live mode needs this page to be served by board_server.py on the PYNQ-Z2"><span class="dot"></span><span id="modeText">Simulation</span></span>
+      <div class="seg" role="radiogroup" aria-label="Hardware build">
+        <label><input type="radio" name="build" value="b2" checked><span>50 MHz · build B2</span></label>
+        <label><input type="radio" name="build" value="62m5"><span>62.5 MHz · registered CFU</span></label>
+        <label><input type="radio" name="build" value="b3"><span>40 MHz · b3, runs your programs</span></label>
+      </div>
+    </div>
+  </header>
+  <div class="buildnote" id="buildNote" aria-live="polite"></div>
+
+  <section class="stats" aria-label="Measured on the PYNQ-Z2, 18 Sep 2026">
+    <div class="stat"><b>2.5<small>ms</small></b><span>to swap the accelerator (kernel driver)</span></div>
+    <div class="stat"><b>111<small>KB</small></b><span>partial bitstream, 2.7 % of the full 4.0 MB</span></div>
+    <div class="stat"><b>26<small>×</small></b><span>faster than reloading the whole device</span></div>
+    <div class="stat"><b><i id="stClkV" style="font-style:normal">50</i><small>MHz</small></b><span id="stClkSub">core clock, read back from FCLK0</span></div>
+  </section>
+
+  <div class="main">
+    <!-- CPU -->
+    <section class="panel" aria-labelledby="cpuH">
+      <div class="panel-head">
+        <h2 id="cpuH">The core, one clock at a time</h2>
+        <span class="label mono" id="cyc">cycle 0 · pc 0x000</span>
+      </div>
+
+      <div class="answer">
+        <div class="big" id="ans">42</div>
+        <div class="what">
+          <span class="label">dmem word 4 · the program's answer</span>
+          <strong id="ansWhat">fn0 on (6, 7) → 6 × 7</strong>
+          <span class="muted" id="ansNote">Multiplier in the slot</span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="step" type="button">Step</button>
+        <button id="run" type="button">Run</button>
+        <button id="reset" type="button">Reset</button>
+        <button id="toEnd" type="button">Run to halt</button>
+        <label class="speed" for="speed">speed <input id="speed" type="range" min="1" max="30" value="6"> <span id="speedV" class="mono">6/s</span></label>
+      </div>
+
+      <div>
+        <div class="label" style="margin-bottom:6px">One clock of a single-cycle core</div>
+        <div class="stages" id="stages">
+          <div class="stage"><span class="label">Fetch</span><span class="v" id="sF">–</span></div>
+          <div class="stage"><span class="label">Decode</span><span class="v" id="sD">–</span></div>
+          <div class="stage"><span class="label">Execute</span><span class="v" id="sE">–</span></div>
+          <div class="stage"><span class="label">Write back</span><span class="v" id="sW">–</span></div>
+        </div>
+      </div>
+
+      <div class="cpu">
+        <div>
+          <div class="label" style="margin-bottom:6px" id="imemLbl">imem · sw/program.hex (41 instructions)</div>
+          <ol class="listing" id="listing"></ol>
+        </div>
+        <div class="side">
+          <div class="slotbox" aria-live="polite">
+            <span class="label">CFU slot · MMIO at 0xF000_0000</span>
+            <strong id="slotName">Multiplier (cfu_mul.v)</strong>
+            <div class="row"><span id="cA">op_a 0</span><span id="cB">op_b 0</span><span id="cF">fn 0</span><span id="cR">→ 0</span></div>
+          </div>
+          <div>
+            <div class="label" style="margin-bottom:4px">Registers</div>
+            <table><tbody id="regs"></tbody></table>
+          </div>
+          <div>
+            <div class="label" style="margin-bottom:4px">dmem · read over AXI GPIO on the board</div>
+            <table><tbody id="dmem"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- slot -->
+    <section class="panel fp" aria-labelledby="fpH">
+      <div class="panel-head">
+        <h2 id="fpH">Swap the slot</h2>
+        <span class="label">xc7z020clg400-1 · device view</span>
+      </div>
+      <svg id="fp" viewBox="0 0 400 290" role="img" aria-label="Zynq-7020 floorplan: processing system on the left, programmable logic on the right, the reconfigurable Pblock in clock region X1Y1"></svg>
+      <div class="status-line">
+        <span class="pill run" id="corePill">core running</span>
+        <span id="swapMsg" class="muted">Press swap: the core is held in reset while about 275 configuration frames stream into the Pblock.</span>
+      </div>
+      <div class="controls">
+        <button id="swap" class="primary" type="button">Swap to bitwise unit</button>
+        <div class="path" id="pathBox" hidden>
+          <label><input type="radio" name="path" id="pathDriver" value="driver" checked> kernel driver</label>
+          <label><input type="radio" name="path" id="pathPynq" value="pynq"> PYNQ Python API</label>
+        </div>
+      </div>
+      <div class="tl" id="tl">
+        <div class="tl-head"><span class="label" id="tlSrc">Swap timeline</span><span class="mono muted" id="tlTotal"></span></div>
+        <div class="tl-bar" id="tlBar" role="img" aria-label="Swap timeline"></div>
+        <ol class="tl-legend" id="tlLegend"></ol>
+      </div>
+      <p class="muted" style="font-size:13px">The animation runs about 500× slower than the real swap. Frames on 7-series parts span a full clock-region height, so the slot fills column by column. That is why partial-bitstream size follows Pblock width, not height.</p>
+      <div id="boardBox" hidden>
+        <div class="boardres" id="boardRes"></div>
+        <div class="label" style="margin:10px 0 4px">Swaps on the board this session</div>
+        <ol class="log" id="log"></ol>
+      </div>
+    </section>
+  </div>
+
+  <div class="usr" id="usr" hidden>
+    <section class="panel" aria-labelledby="progH">
+      <div class="panel-head"><h2 id="progH">Run a program on the core</h2><span class="label" id="progSrc"></span></div>
+      <div class="prog-row">
+        <select id="progSel" aria-label="Program"></select>
+        <span class="prog-in" id="progIn"></span>
+        <button id="progRun" class="primary" type="button">Run on the core</button>
+      </div>
+      <textarea id="progSrcTxt" spellcheck="false" rows="10" aria-label="Program source"></textarea>
+      <div class="boardres prog-out" id="progOut" hidden></div>
+      <p class="muted" style="font-size:13px" id="progNote"></p>
+    </section>
+    <section class="panel" aria-labelledby="rickH">
+      <div class="panel-head"><h2 id="rickH">A video, decoded by the core</h2><span class="label" id="rickSrc"></span></div>
+      <canvas class="cv" id="rickCv" width="96" height="64" role="img" aria-label="Video frame, 96 by 64 pixels, 8 colours"></canvas>
+      <div class="rickbar">
+        <button id="rickPlay" class="primary" type="button">Play</button>
+        <button id="rickSwap" type="button">Swap the slot</button>
+        <span class="pill run" id="rickSlot">–</span>
+      </div>
+      <p class="muted" style="font-size:13px" id="rickInfo"></p>
+    </section>
+  </div>
+
+  <div class="lower">
+    <section class="panel" aria-labelledby="relH">
+      <div class="panel-head"><h2 id="relH">How often does a swap fail?</h2><span class="label" id="relSrc">overnight swap soak</span></div>
+      <div class="rel" id="relBody"></div>
+      <p class="muted" style="font-size:13px" id="relLive"></p>
+    </section>
+    <section class="panel" aria-labelledby="sysH">
+      <div class="panel-head"><h2 id="sysH">The board right now</h2><span class="label" id="sysAge"></span></div>
+      <div id="sysBody"></div>
+    </section>
+  </div>
+  <div class="lower">
+    <section class="panel chart" aria-labelledby="chH">
+      <div class="panel-head">
+        <h2 id="chH">Swap vs full reload</h2>
+        <span class="label">measured · PYNQ-Z2 · 20 swaps per tier · log scale</span>
+      </div>
+      <svg id="chart" viewBox="0 0 560 250" role="img" aria-label="Log-scale bar chart. PYNQ API: partial 62.4 ms, full 585 ms. Kernel driver: partial 2.5 ms, full 66.3 ms. PCAP limit: partial 0.28 ms, full 10.1 ms."></svg>
+      <div class="legend"><span><i style="background:var(--line)"></i>full reload · 4.0 MB</span><span><i style="background:var(--rp)"></i>partial swap · 111 KB</span></div>
+      <p class="muted" style="font-size:13px">The driver path does a DMA setup, cache flush and completion poll on every load. That fixed cost is why 2.5 ms sits above the 0.28 ms PCAP limit, and why 26× trails the 36× size ratio. PYNQ adds about 60 ms of bit→bin conversion on top.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="qaH">
+      <h2 id="qaH">Questions we expect</h2>
+      <div>
+        <details><summary>Why not 0.28 ms?</summary><p>PCAP peak bandwidth is a floor. The Linux zynq-fpga driver adds DMA setup, cache maintenance and a completion poll per load, and at 111 KB that fixed cost dominates. PYNQ adds a bit→bin conversion and a /lib/firmware copy on every call.</p></details>
+        <details><summary>Why hold the core in reset instead of a DFX decoupler?</summary><p>Nothing static samples the slot while it changes, and the reset guarantees that. A decoupler is needed when the static side keeps running against the partition.</p></details>
+        <details><summary>What limits the core clock?</summary><p>The CFU result had to reach the register file in one cycle on a single-cycle machine: a path of roughly 16 ns, so 50 MHz (20 ns) closes with about 4 ns of slack and 62.5 MHz (16 ns) did not. The 62.5 MHz build registers the result in the static region, which costs one clock: software leaves one <code>nop</code> after every CFU start. It closes 16 ns with 1.18 ns of slack. The accelerators' source is unchanged, but each build has its own partial bitstreams (same size, different bytes): a partial is tied to the locked static design it was built against, so the page loads the matching pair when you switch builds.</p></details>
+        <details><summary>Why is the partition 111 KB for 81 LUTs?</summary><p>7-series configuration frames span a full clock-region height, so partial size scales with Pblock width, not with what is inside it. This is already the narrow geometry, one DSP column wide. It was 221 KB with two.</p></details>
+        <details><summary>Any failures?</summary><p id="qaFail">Yes. A swap is occasionally ignored: the driver is given the right bitstream and reports success, but the slot keeps its old contents, and later partial loads are ignored too until the whole device is reloaded. The board server checks every swap and, on a miss, reloads the full bitstream, and the result box says so. The root cause is still open.</p></details>
+      </div>
+    </section>
+  </div>
+
+  <footer>The simulation runs the same program.hex as the FPGA, and its results match the xsim testbench (demo/sim_check.js). Timings are measured on hardware. Source: riscv_pdr.</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/motion@11.18.2/dist/motion.js"></script>
+<script src="sim.js"></script>
+<script src="apps.js"></script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const hex = (v, n = 8) => '0x' + (v >>> 0).toString(16).padStart(n, '0');
+
+  const VAR = {
+    multiplier: { name: 'Multiplier (cfu_mul.v)', short: 'multiplier', w4: 'fn0 on (6, 7) → 6 × 7', note: 'Multiplier in the slot' },
+    bitwise:    { name: 'Bitwise unit (cfu_bitwise.v)', short: 'bitwise unit', w4: 'fn0 on (6, 7) → popcount(6)', note: 'Bitwise unit in the slot' },
+  };
+  const other = (v) => (v === 'multiplier' ? 'bitwise' : 'multiplier');
+  const DMEM_NOTES = ['x1 + x2', 'x2 − x1', '', '', 'fn0 (6, 7)', 'fn1 (6, 7)', 'fn2 (6, 7)', 'fn3 (6, 7)', 'fn0 (2¹⁶, 2¹⁶)', 'fn1 (2¹⁶, 2¹⁶)', 'fn2 (2¹⁶, 2¹⁶)'];
+  const REG_NOTES = { 1: '6', 2: '7', 3: 'sum', 4: 'diff', 5: 'CFU base', 7: 'big operand', 8: 'fn', 9: 'CFU result' };
+  const REGS = [1, 2, 3, 4, 5, 7, 8, 9];
+
+  let build = 'b2';
+  const core = new RV.Core('bitwise', build);
+  let running = null, busy = false, live = null;
+
+  // ---------- listing / tables ----------
+  const listing = $('listing');
+  function buildListing() {
+    listing.innerHTML = '';
+    RV.BUILDS[build].program.forEach(([w, asm], i) => {
+      const li = document.createElement('li');
+      if (/\(x5\)/.test(asm)) li.className = 'cfu';
+      if (asm === 'nop') { li.className = 'nop'; li.title = 'Added for the registered CFU: result_q needs one clock to settle'; }
+      li.innerHTML = `<span class="a">${(i * 4).toString(16).padStart(3, '0')}</span><span class="h">${hex(w).slice(2)}</span><span class="s"></span>`;
+      li.querySelector('.s').textContent = asm;
+      listing.appendChild(li);
+    });
+  }
+  buildListing();
+  $('regs').innerHTML = REGS.map((r) => `<tr><th>x${r}</th><td class="num" id="x${r}">0</td><td class="note">${REG_NOTES[r]}</td></tr>`).join('');
+  $('dmem').innerHTML = DMEM_NOTES.map((n, i) => `<tr class="${i >= 4 ? 'cfuw' : ''} ${n ? '' : 'dim'}"><th>[${i}]</th><td class="num" id="m${i}">0</td><td class="note">${n || 'unused'}</td></tr>`).join('');
+
+  const fmt = (v) => { v >>>= 0; return v > 0xFFFF ? hex(v) : String(v); };
+  function setCell(el, text) { if (el.textContent !== text) { el.textContent = text; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } }
+
+  function render(quiet) {
+    const idx = core.pc >>> 2;
+    listing.querySelectorAll('li').forEach((li, i) => li.classList.toggle('pc', i === idx));
+    const cur = listing.children[idx];
+    if (cur && !quiet) { const lt = listing.scrollTop, top = cur.offsetTop - listing.offsetTop; if (top < lt + 20 || top > lt + listing.clientHeight - 40) listing.scrollTop = top - listing.clientHeight / 2; }
+    $('cyc').textContent = `cycle ${core.cycles} · pc ${hex(core.pc, 3)}${core.halted ? ' · halted' : ''}`;
+    REGS.forEach((r) => setCell($('x' + r), fmt(core.x[r])));
+    DMEM_NOTES.forEach((_, i) => setCell($('m' + i), fmt(core.dmem[i])));
+    const c = core.cfu;
+    $('cA').textContent = `op_a ${fmt(c.a)}`; $('cB').textContent = `op_b ${fmt(c.b)}`; $('cF').textContent = `fn ${c.fn}`;
+    $('cR').textContent = `→ ${fmt(core.load(0xF000000C))}`;
+    $('slotName').textContent = VAR[core.variant].name;
+    const ans = $('ans'), done = core.cycles > (build === '62m5' ? 13 : 12);   // word 4 is written by instruction 12
+    const t = done ? String(core.dmem[4]) : '–';
+    if (ans.textContent !== t) { ans.textContent = t; ans.classList.add('flip'); setTimeout(() => ans.classList.remove('flip'), 260); }
+    $('ansWhat').textContent = VAR[core.variant].w4;
+    $('ansNote').textContent = VAR[core.variant].note;
+  }
+
+  function showStages(e) {
+    if (!e) { ['sF', 'sD', 'sE', 'sW'].forEach((id) => ($(id).textContent = '–')); return; }
+    const m = e.asm.split(/\s+/)[0];
+    $('sF').textContent = `pc ${hex(e.pc, 3)} → ${hex(e.word)}`;
+    $('sD').textContent = e.asm;
+    let ex = { add: 'ALU add', sub: 'ALU sub', addi: 'ALU add imm', lui: 'imm << 12', jal: 'pc ← pc (halt loop)', nop: build === '62m5' ? 'idle · result_q ← result' : 'idle' }[m] || '';
+    if (e.mem) ex = `address ${hex(e.mem.addr)}` + (e.mem.addr >= 0xF0000000 ? ' · CFU' : '');
+    if (e.mem && e.mem.kind === 'cfu-read' && build === '62m5') ex += ' · result_q';
+    $('sE').textContent = ex;
+    let wb = '–';
+    if (e.mem && e.mem.kind === 'dmem') wb = `mem[${e.mem.addr >>> 2}] ← ${fmt(core.dmem[e.mem.addr >>> 2])}`;
+    else if (e.mem && e.mem.kind === 'cfu') wb = `CFU ${['op_a', 'op_b', 'fn (start)'][(e.mem.addr - 0xF0000000) >>> 2]} ← ${fmt([core.cfu.a, core.cfu.b, core.cfu.fn][(e.mem.addr - 0xF0000000) >>> 2])}`;
+    else if (e.rd) wb = `x${e.rd} ← ${fmt(core.x[e.rd])}` + (e.mem ? ' (CFU result)' : '');
+    $('sW').textContent = wb;
+    const st = $('stages'); st.classList.remove('tick'); void st.offsetWidth; st.classList.add('tick');
+  }
+
+  function step() { if (core.halted) return false; showStages(core.step()); render(); return !core.halted; }
+  function stop() { clearInterval(running); running = null; $('run').textContent = 'Run'; }
+  function speed() { return +$('speed').value; }
+
+  $('step').onclick = () => { stop(); step(); };
+  $('run').onclick = () => {
+    if (running) return stop();
+    if (core.halted) { core.reset(); render(); }
+    $('run').textContent = 'Pause';
+    const tick = () => { if (!step()) stop(); };
+    running = setInterval(tick, 1000 / speed());
+  };
+  $('speed').oninput = () => { $('speedV').textContent = speed() + '/s'; if (running) { stop(); $('run').click(); } };
+  $('reset').onclick = () => { stop(); core.reset(); showStages(null); render(); };
+  $('toEnd').onclick = () => { stop(); let last = null; while (!core.halted) last = core.step(); showStages(last); render(); };
+
+  // ---------- floorplan ----------
+  const svg = $('fp');
+  const el = (tag, attrs, parent = svg) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); parent.appendChild(n); return n; };
+  // PS on the left, PL as 2 × 3 clock regions; the Pblock sits in X1Y1 (SLICE_X92Y50:X99Y99 + DSP48_X3Y20:Y39)
+  el('rect', { x: 8, y: 20, width: 96, height: 250, rx: 6, fill: 'var(--grid)', stroke: 'var(--line)' });
+  el('text', { x: 56, y: 132, 'text-anchor': 'middle', 'font-size': 13, 'font-weight': 600, fill: 'var(--ink)' }).textContent = 'PS7';
+  el('text', { x: 56, y: 150, 'text-anchor': 'middle', 'font-size': 10, fill: 'var(--muted)' }).textContent = 'dual Cortex-A9';
+  el('text', { x: 56, y: 164, 'text-anchor': 'middle', 'font-size': 10, fill: 'var(--muted)' }).textContent = 'PCAP · FCLK0';
+  const PL = { x: 116, y: 20, w: 276, h: 250 };
+  el('rect', { x: PL.x, y: PL.y, width: PL.w, height: PL.h, rx: 6, fill: 'var(--panel)', stroke: 'var(--line)' });
+  for (let c = 0; c < 46; c++) el('rect', { x: PL.x + 6 + c * 5.85, y: PL.y + 6, width: 2.2, height: PL.h - 12, fill: 'var(--grid)' });
+  const rh = PL.h / 3;
+  el('line', { x1: PL.x + PL.w / 2, y1: PL.y, x2: PL.x + PL.w / 2, y2: PL.y + PL.h, stroke: 'var(--line)', 'stroke-dasharray': '4 4' });
+  [1, 2].forEach((i) => el('line', { x1: PL.x, y1: PL.y + i * rh, x2: PL.x + PL.w, y2: PL.y + i * rh, stroke: 'var(--line)', 'stroke-dasharray': '4 4' }));
+  [['X0Y2', 0, 0], ['X1Y2', 1, 0], ['X0Y1', 0, 1], ['X1Y1', 1, 1], ['X0Y0', 0, 2], ['X1Y0', 1, 2]].forEach(([t, cx, cy]) =>
+    el('text', { x: PL.x + cx * PL.w / 2 + 6, y: PL.y + cy * rh + 13, 'font-size': 9, fill: 'var(--muted)' }).textContent = t);
+  // static logic
+  el('rect', { x: PL.x + 22, y: PL.y + rh + 18, width: 140, height: 80, rx: 4, fill: 'var(--static-soft)', stroke: 'var(--static)' });
+  el('text', { x: PL.x + 32, y: PL.y + rh + 40, 'font-size': 12, 'font-weight': 600, fill: 'var(--static)' }).textContent = 'static region';
+  ['RV32I core · regfile', 'imem · dmem', 'AXI GPIO readout'].forEach((t, i) =>
+    el('text', { x: PL.x + 32, y: PL.y + rh + 58 + i * 15, 'font-size': 10.5, fill: 'var(--ink)' }).textContent = t);
+  // AXI path PS -> static
+  el('path', { d: `M104 ${PL.y + rh + 60} H${PL.x + 22}`, stroke: 'var(--static)', 'stroke-width': 1.5, fill: 'none', 'stroke-dasharray': '3 3' });
+  // the Pblock: one clock region tall, 8 slice columns + 1 DSP column wide
+  const PB = { x: PL.x + 172, y: PL.y + rh, w: 48, h: rh };
+  el('rect', { x: PB.x, y: PB.y, width: PB.w, height: PB.h, fill: 'var(--rp-soft)' });
+  const fill = el('g', {});
+  const COLS = 24;
+  const cols = [];
+  for (let i = 0; i < COLS; i++) cols.push(el('rect', { x: PB.x + i * (PB.w / COLS), y: PB.y, width: PB.w / COLS - 0.4, height: PB.h, fill: 'var(--rp)', opacity: 0.85 }, fill));
+  el('rect', { x: PB.x, y: PB.y, width: PB.w, height: PB.h, fill: 'none', stroke: 'var(--rp)', 'stroke-width': 2 });
+  el('path', { d: `M${PL.x + 162} ${PB.y + PB.h / 2 + 10} H${PB.x}`, stroke: 'var(--rp)', 'stroke-width': 1.5, fill: 'none' });
+  const pbLabel = el('text', { x: PB.x + PB.w / 2, y: PB.y - 8, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 600, fill: 'var(--rp)' });
+  el('text', { x: PB.x + PB.w / 2, y: PB.y + PB.h + 14, 'text-anchor': 'middle', 'font-size': 9.5, fill: 'var(--muted)' }).textContent = 'pblock_cfu';
+  const frameText = el('text', { x: PB.x + PB.w / 2, y: PB.y + PB.h + 27, 'text-anchor': 'middle', 'font-size': 9.5, fill: 'var(--muted)', 'font-family': 'var(--mono)' });
+  // PCAP path PS -> Pblock, lit during a swap
+  const pcap = el('path', { d: `M104 ${PL.y + 60} H${PB.x + PB.w / 2} V${PB.y}`, stroke: 'var(--rp)', 'stroke-width': 2, fill: 'none', 'stroke-dasharray': '5 4', opacity: 0.25 });
+  el('text', { x: 180, y: PL.y + 54, 'font-size': 9.5, fill: 'var(--muted)' }).textContent = 'PCAP → configuration frames';
+
+  function paintSlot() {
+    pbLabel.textContent = core.variant === 'multiplier' ? 'mul · 81 LUT · 4 DSP' : 'bitwise · 75 LUT · 0 DSP';
+    frameText.textContent = '111,105 B ≈ 275 frames';
+    cols.forEach((c) => c.setAttribute('opacity', 0.85));
+    $('swap').textContent = `Swap to ${VAR[other(core.variant)].short}`;
+  }
+
+  async function streamFrames() {
+    pcap.setAttribute('opacity', 1);
+    cols.forEach((c) => c.setAttribute('opacity', 0.12));
+    const dur = reduced ? 0 : 1250;   // ≈ 500 × the 2.5 ms driver swap
+    const t0 = performance.now();
+    await new Promise((res) => {
+      const f = (now) => {
+        const p = dur ? Math.min(1, (now - t0) / dur) : 1, n = Math.floor(p * COLS);
+        cols.forEach((c, i) => c.setAttribute('opacity', i < n ? 0.85 : 0.12));
+        frameText.textContent = `frame ${Math.round(p * 275)} / ≈275`;
+        p < 1 ? requestAnimationFrame(f) : res();
+      };
+      requestAnimationFrame(f);
+    });
+    pcap.setAttribute('opacity', 0.25);
+  }
+
+  function setReset(on) {
+    const p = $('corePill');
+    p.className = 'pill ' + (on ? 'rst' : 'run');
+    p.textContent = on ? 'core held in reset' : 'core running';
+  }
+
+  // ---------- swap ----------
+  $('swap').onclick = async () => {
+    if (busy) return;
+    busy = true; epoch++; stop();
+    const to = other(core.variant), before = core.dmem[4];
+    lockUI(true);
+    const path = $('pathPynq').checked ? 'pynq' : 'driver';
+    const board = live ? api(`api/swap?to=${to}&path=${path}`, 'POST').catch((e) => ({ error: String(e) })) : null;
+
+    if (!board) drawTimeline(MODEL(path), 'model');
+    setReset(true); core.reset(); showStages(null); render(true);
+    $('swapMsg').textContent = `Streaming the ${VAR[to].short} partial bitstream into the Pblock…`;
+    await streamFrames();
+    core.variant = to; paintSlot(); render(true);
+    await sleep(reduced ? 0 : 250);
+    setReset(false);
+    $('swapMsg').textContent = 'Reset released. Same program, rerunning…';
+    while (!core.halted) { showStages(core.step()); render(true); await sleep(reduced ? 0 : 22); }
+    $('swapMsg').textContent = `Word 4 went from ${before} to ${core.dmem[4]}. Nothing outside the Pblock was reconfigured.`;
+
+    if (board) showBoard(await board, to);
+    lockUI(false);
+    busy = false;
+  };
+
+  // ---------- live board ----------
+  function showBoard(r, to) {
+    const box = $('boardRes');
+    $('boardBox').hidden = false;
+    if (r.phases) drawTimeline(r.phases, 'board');
+    refreshSession();
+    if (r.error) { box.className = 'boardres bad'; box.textContent = `The board did not answer: ${r.error}. The simulation above is still correct. Rerun the server cell in the notebook.`; return; }
+    const probed = !r.words;   // b3 with a user program loaded: verified by the slot probe (42 = multiplier, 2 = bitwise), not by the baked program's words
+    const w = r.words || {}, agree = probed ? r.probe === (to === 'multiplier' ? 42 : 2) : [0, 1, 4, 5, 8, 9].every((k) => w[k] === core.dmem[k]);
+    box.className = 'boardres' + (agree && !r.retried ? '' : ' bad');   // amber for a mismatch, and for a swap that needed recovering
+    const via = r.path === 'pynq' ? 'PYNQ Python API' : 'kernel driver';
+    box.innerHTML = (r.recovery === 'full'
+      ? `<div><strong>The slot ignored the partial; a full reload recovered it (${(r.total_ms || r.ms).toFixed(0)} ms in all)</strong> <span class="muted">(${via}; the ignored load itself took ${r.ms.toFixed(2)} ms)</span></div>`
+      : `<div><strong>Board swapped in ${r.ms.toFixed(2)} ms</strong> <span class="muted">(${via}${r.retried ? ', after a re-read' : ''})</span></div>`) +
+      (probed ? `<span class="mono">slot probe: 6 · 7 through fn 0 = ${r.probe}</span>` : `<span class="mono">word 4 = ${w[4]} · word 5 = ${w[5]} · word 9 = ${fmt(w[9])}</span>`) +
+      `<span>${agree ? (probed ? 'The probe names the unit that was loaded.' : 'The readback matches the simulation.') : 'The readback does NOT match the simulation. Swap again; the re-download recovers it.'}</span>`;
+    const li = document.createElement('li');
+    li.textContent = `→ ${to.padEnd(10)} ${r.ms.toFixed(2).padStart(7)} ms  ${r.path.padEnd(6)} ${probed ? 'probe=' + r.probe : 'w4=' + w[4]} ${agree ? 'ok' : 'MISMATCH'}`;
+    $('log').prepend(li);
+  }
+
+  let epoch = 0;   // bumped by every build switch, so a probe that started before it cannot undo it
+  async function probe() {
+    const mine = epoch, fresh = () => !busy && mine === epoch;
+    try {
+      live = await api('api/status', 'GET', nbKernel() ? 20000 : 1500);
+      if (live.error) throw new Error(live.error);
+    } catch { live = null; }
+    const m = $('mode');
+    m.classList.toggle('live', !!live);
+    if (live) {
+      $('modeText').textContent = `Live · PYNQ-Z2 · FCLK0 ${live.fclk_mhz.toFixed(1)} MHz`;
+      $('pathBox').hidden = false;
+      if (!fresh()) { setTimeout(probe, 1000); return; }   // something changed the board since this probe began: look again once it settles
+      try {
+        const bl = await api('api/builds');
+        if (!fresh()) { setTimeout(probe, 1000); return; }   // the board changed while we were asking
+        document.querySelectorAll('input[name=build]').forEach((i) => {
+          const info = bl.builds.find((x) => x.id === i.value);
+          i.disabled = !info || !info.available;
+          i.parentElement.title = i.disabled ? 'This bundle is not on the board' : '';
+          if (fresh()) i.checked = i.value === bl.active;
+        });
+        if (fresh() && bl.active !== build) { build = core.build = bl.active; buildListing(); paintBuild(); core.reset(); core.run(); paintSlot(); render(true); }
+      } catch { /* an older board_server without /api/builds: stay on the build the page opened with */ }
+      if (fresh() && live.variant !== core.variant) { core.variant = live.variant; core.reset(); core.run(); paintSlot(); render(); }
+      pollSys(); refreshSession();
+      if (!sysTimer) sysTimer = setInterval(() => { if (!document.hidden) pollSys(); }, 5000);
+    } else { $('modeText').textContent = 'Simulation · timings measured on the board'; drawSys(null); }
+  }
+
+  // ---------- chart (log scale, build B2, run 2) ----------
+  const DATA = [['PYNQ Python API', 585, 62.4], ['Kernel driver + DMA', 66.3, 2.56], ['PCAP bandwidth limit', 10.1, 0.278]];
+  const ch = $('chart'), X0 = 52, X1 = 548, Y0 = 212, Y1 = 14, lo = -1, hi = 3;
+  const y = (v) => Y0 - (Math.log10(v) - lo) / (hi - lo) * (Y0 - Y1);
+  const cEl = (tag, attrs, text) => { const n = el(tag, attrs, ch); if (text != null) n.textContent = text; return n; };
+  [0.1, 1, 10, 100, 1000].forEach((v) => {
+    cEl('line', { x1: X0, x2: X1, y1: y(v), y2: y(v), stroke: 'var(--grid)' });
+    cEl('text', { x: X0 - 8, y: y(v) + 4, 'text-anchor': 'end' }, v >= 1 ? `${v} ms` : `${v}`);
+  });
+  const gw = (X1 - X0) / 3;
+  DATA.forEach(([label, full, part], i) => {
+    const cx = X0 + gw * i + gw / 2, bw = 46;
+    [[full, cx - bw - 3, 'var(--line)'], [part, cx + 3, 'var(--rp)']].forEach(([v, x, color]) => {
+      cEl('rect', { x, y: y(v), width: bw, height: Y0 - y(v), fill: color, rx: 2 });
+      cEl('text', { x: x + bw / 2, y: y(v) - 5, 'text-anchor': 'middle', class: 'val' }, v < 1 ? v.toFixed(2) : String(v));
+    });
+    cEl('text', { x: cx, y: Y0 + 18, 'text-anchor': 'middle', 'font-size': 12, style: 'fill:var(--ink)' }, label);
+    cEl('text', { x: cx, y: Y0 + 33, 'text-anchor': 'middle' }, `${(full / part).toFixed(1)}× faster`);
+  });
+  cEl('line', { x1: X0, x2: X1, y1: Y0, y2: Y0, stroke: 'var(--muted)' });
+
+  // ---------- builds: B2 (50 MHz) and the 62.5 MHz registered-CFU build ----------
+  const BUILD_INFO = {
+    b2:     { mhz: 50,   hw: true,  note: 'The original build. 50 MHz read back on the board, 40 of 40 swaps verified by readback.' },
+    b3:     { mhz: 40,   hw: true, note: 'B2 plus a program loader: the PS can write instruction and data memory while the core is held in reset, and a cycle counter reads back how long a program ran. Same core, same slot, same 111 KB partial bitstreams. It runs at 40 MHz: with instruction memory writable, the load path is four asynchronous RAM reads in series (19.9 ns). Verified on the board on 31/10/2026 (40.0 MHz read back).' },
+    '62m5': { mhz: 62.5, hw: true,  note: 'The CFU result is registered in the static region, so software leaves one nop after each CFU start. Timing closes at 16 ns with 1.18 ns of slack. On the board: FCLK0 read back 62.5 MHz, 20 of 20 swaps verified, driver load median 2.8 ms.' },
+  };
+  const xh = () => { const x = (document.cookie.match(/(?:^|; )_xsrf=([^;]*)/) || [])[1]; return x ? { 'X-XSRFToken': x } : {}; };
+  // ---------- transport: HTTP when served by board_server.py; the notebook's own kernel when embedded in Jupyter ----------
+  const nbKernel = () => { try { return window.parent !== window && parent.Jupyter && parent.Jupyter.notebook && parent.Jupyter.notebook.kernel; } catch { return null; } };
+  function viaKernel(url, method, ms, body) {
+    return new Promise((resolve, reject) => {
+      let out = '';
+      const t = setTimeout(() => reject(new Error('the kernel did not answer')), ms);
+      nbKernel().execute(`bridge(${JSON.stringify(url)}, ${JSON.stringify(method)}${body === undefined ? '' : ', ' + JSON.stringify(JSON.stringify(body))})`, { iopub: { output: (m) => {
+        if (m.msg_type === 'stream') out += m.content.text;
+        else if (m.msg_type === 'error') { clearTimeout(t); reject(new Error(m.content.ename + ': ' + m.content.evalue)); return; }
+        const a = out.indexOf('@@JSON@@'), z = out.indexOf('@@END@@');
+        if (a >= 0 && z > a) { clearTimeout(t); try { resolve(JSON.parse(out.slice(a + 8, z))); } catch (e) { reject(e); } }
+      } } }, { silent: false });
+    });
+  }
+  async function api(url, method = 'GET', ms = 120000, body) {
+    if (nbKernel()) return viaKernel(url, method, ms, body);
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
+    try {
+      const hdr = method === 'POST' ? { ...xh(), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) } : {};
+      return await (await fetch(url, { method, headers: hdr, body: body === undefined ? undefined : JSON.stringify(body), signal: ctl.signal })).json();
+    } finally { clearTimeout(t); }
+  }
+  const tween = (node, from, to, f) => {
+    if (reduced || !window.Motion) { node.textContent = f(to); return; }
+    Motion.animate(from, to, { duration: 0.45, ease: [0.16, 1, 0.3, 1], onUpdate: (v) => (node.textContent = f(v)) });
+  };
+  // the program and video panels (second script) reuse this page's transport and slot state
+  window.RVDEMO = { api, isLive: () => !!live, variant: () => core.variant, busy: () => busy, build: () => build,
+                    swapClick: () => $('swap').click() };
+  let shownMhz = 50;
+  function paintBuild(extra) {
+    const bi = BUILD_INFO[build];
+    $('imemLbl').textContent = `imem · sw/program.hex (${RV.BUILDS[build].program.length} instructions${build === '62m5' ? ', one nop after each CFU start' : ''})`;
+    tween($('stClkV'), shownMhz, bi.mhz, (v) => (Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1)));
+    shownMhz = bi.mhz;
+    $('stClkSub').textContent = build === 'b2' ? 'core clock, read back from FCLK0'
+      : build === 'b3' ? 'core clock · timing met at 40 MHz' + (bi.hw ? ', read back from FCLK0' : '; not yet run on the board')
+      : 'core clock · timing met, 1.18 ns slack' + (bi.hw ? ', read back from FCLK0' : '; not yet run on the board');
+    $('buildNote').innerHTML = `<span class="tag ${bi.hw ? 'ok' : 'pend'}">${bi.hw ? '✓ verified on the board' : '… built, board run pending'}</span><span>${bi.note}</span>` + (extra || '');
+  }
+  function lockUI(on) { document.querySelectorAll('#step,#run,#reset,#toEnd,#swap,input[name=build]').forEach((b) => (b.disabled = on)); }
+  document.querySelectorAll('input[name=build]').forEach((i) => i.addEventListener('change', () => setBuild(i.value)));
+  async function setBuild(b) {
+    if (busy || b === build) return;
+    busy = true; epoch++; stop(); lockUI(true);
+    const prev = build;
+    let r = null;
+    if (live) {
+      $('buildNote').innerHTML = '<span class="tag pend">… switching</span><span>Loading the full bitstream onto the board (about 0.6 s) and reading the clock back.</span>';
+      r = await api(`api/build?b=${b}`, 'POST').catch((e) => ({ error: String(e) }));
+      if (r.error) {
+        document.querySelector(`input[name=build][value=${prev}]`).checked = true;
+        $('buildNote').innerHTML = `<span class="tag pend">board did not switch</span><span>${r.error}</span>`;
+        lockUI(false); busy = false; probe(); return;
+      }
+    }
+    build = core.build = b; core.variant = 'bitwise'; core.reset(); core.run();
+    buildListing(); showStages(null); paintSlot(); render(true);
+    paintBuild(r ? `<span class="tag ${r.clock_ok ? 'ok' : 'pend'}">${r.clock_ok ? '✓' : '!'} FCLK0 read back ${r.fclk_mhz.toFixed(1)} MHz${r.clock_ok ? '' : `, expected ${r.expected_mhz}`}</span>` : '');
+    lockUI(false); busy = false;
+    if (live) probe();
+  }
+
+  // ---------- swap timeline: measured phases from the board, or the board's median timings in simulation ----------
+  const PH = { reset: 'Reset held', load: 'Partial load', readback: 'Release + readback', 're-read': 'Re-read', 'full reload': 'Full reload' };
+  const phClass = (n) => 'ph-' + n.replace(' ', '-');
+  const MODEL = (path) => [{ name: 'reset', dur_ms: path === 'pynq' ? 0.1 : 0.07 }, { name: 'load', dur_ms: path === 'pynq' ? 62.4 : 2.54 }, { name: 'readback', dur_ms: 1.07 }];
+  const fmtMs = (v) => (v >= 100 ? v.toFixed(0) : v >= 1 ? v.toFixed(1) : v.toFixed(2)) + ' ms';
+  let tlTimer = null;
+  function drawTimeline(phases, src) {
+    const bar = $('tlBar'), total = phases.reduce((t, p) => t + p.dur_ms, 0) || 1;
+    bar.innerHTML = phases.map((p) => `<div class="ph ${phClass(p.name)}" style="flex:${Math.max(p.dur_ms, 0.001)} 1 0" title="${PH[p.name]}: ${fmtMs(p.dur_ms)}"></div>`).join('');
+    $('tlLegend').innerHTML = phases.map((p) => {
+      const pc = 100 * p.dur_ms / total;
+      return `<li><i class="${phClass(p.name)}"></i><span>${PH[p.name]}</span><b>${fmtMs(p.dur_ms)} · ${pc < 1 ? '<1' : pc.toFixed(0)} %</b></li>`;
+    }).join('');
+    $('tlTotal').textContent = `${fmtMs(total)} end to end`;
+    $('tlSrc').textContent = src === 'board' ? 'Last swap · each phase timed on the board' : 'Typical swap · the board\'s median timings';
+    bar.setAttribute('aria-label', phases.map((p) => `${PH[p.name]} ${fmtMs(p.dur_ms)}`).join(', '));
+    clearTimeout(tlTimer);
+    if (!reduced && window.anime) {
+      anime.remove('#tlBar .ph');
+      anime({ targets: '#tlBar .ph', scaleX: [0, 1], opacity: [0, 1], delay: anime.stagger(80), duration: 380, easing: 'easeOutExpo' });
+      // a paused tab never ticks the animation; leave the bar in its final state either way
+      tlTimer = setTimeout(() => bar.querySelectorAll('.ph').forEach((e) => { e.style.transform = ''; e.style.opacity = ''; }), 1400);
+    }
+  }
+
+  // ---------- reliability: the overnight soak ----------
+  const SOAK_FALLBACK = null;
+  const pctf = (v, d = 2) => (100 * v).toFixed(d) + ' %';
+  const overlaps = (rows) => rows.every((a) => rows.every((c) => a.lo <= c.hi && c.lo <= a.hi));
+  function drawSoak(sk) {
+    const body = $('relBody');
+    if (!sk) { body.innerHTML = '<div class="empty">No soak results loaded. Run <code>demo/soak_summary.py</code> on the soak log and put <code>soak/summary.json</code> beside the bitstreams; this panel reads it from <code>/api/soak</code>.</div>'; return; }
+    const groups = [['By direction', sk.by_direction], ['By load path', sk.by_path], ['By gap since the previous swap', sk.by_gap]];
+    const mx = Math.max(2, Math.ceil(100 * Math.max(...groups.flatMap(([, g]) => g.map((x) => x.hi)))));
+    const X = (v) => (100 * 100 * v / mx).toFixed(2);
+    const hours = sk.duration_s / 3600;
+    const span = hours < 1 ? `${Math.round(hours * 60)} min` : `${hours.toFixed(1)} h`;
+    $('relSrc').textContent = `${sk.swaps.toLocaleString()} swaps · ${span}`;
+    const rows = (g) => g.map((x) => `<div class="rrow"><span>${x.key}</span><div class="trk" style="--ax:${mx}"><i class="bar" style="width:${X(x.rate)}%"></i><i class="ci" style="left:${X(x.lo)}%;width:${X(x.hi - x.lo)}%"></i><i class="ref" style="left:${X(sk.rate)}%"></i></div><span class="mono">${pctf(x.rate)} · ${x.miss}/${x.n.toLocaleString()}</span></div>`).join('');
+    const ticks = Array.from({ length: mx + 1 }, (_, i) => `<span>${i} %</span>`).join('');
+    // strip: one mark per ignored swap along the soak's own clock
+    const W = 600, x0 = 8, x1 = 592, tx = (t) => x0 + (x1 - x0) * t / Math.max(sk.duration_s, 1);
+    const mins = sk.duration_s / 60, stepMin = [5, 10, 30, 60, 120].find((m) => mins / m <= 8) || 120;
+    let sv = `<svg viewBox="0 0 ${W} 54" role="img" aria-label="${sk.misses} ignored swaps along ${hours.toFixed(1)} hours of swapping"><line x1="${x0}" x2="${x1}" y1="32" y2="32" stroke="var(--line)"/>`;
+    for (let m = 0; m <= mins; m += stepMin) sv += `<line x1="${tx(m * 60)}" x2="${tx(m * 60)}" y1="32" y2="36" stroke="var(--muted)"/><text x="${tx(m * 60)}" y="48" text-anchor="middle">${m % 60 === 0 ? m / 60 + ' h' : m + ' min'}</text>`;
+    sv += sk.miss_times_s.map((t) => `<g><line x1="${tx(t)}" x2="${tx(t)}" y1="13" y2="32" stroke="var(--warn)" stroke-width="1.5"/><circle cx="${tx(t)}" cy="10" r="3.5" fill="var(--warn)" stroke="var(--panel)" stroke-width="1.5"/><title>ignored swap at ${(t / 60).toFixed(1)} min</title></g>`).join('') + '</svg>';
+    const table = groups.flatMap(([t, g]) => g.map((x) => `<tr><th>${t.replace('By ', '')} · ${x.key}</th><td class="num">${x.miss}/${x.n}</td><td class="num">${pctf(x.rate)}</td><td class="num">${pctf(x.lo)}–${pctf(x.hi)}</td></tr>`)).join('');
+    body.innerHTML = `<div class="relhead"><strong>${sk.misses} of ${sk.swaps.toLocaleString()} swaps were silently ignored (${pctf(sk.rate)})</strong>` +
+      `<span class="muted">95 % interval ${pctf(sk.ci95[0])} to ${pctf(sk.ci95[1])} · ${span} of continuous swapping · ${sk.full_reloads} needed a full reload · ${sk.unrecovered} never recovered</span></div>` +
+      (sk.incident ? `<div class="boardres bad"><strong>The soak ended early: a recovery failed outright.</strong><span>After ${sk.incident.after_full_reloads} successful full reloads, the next one was refused by the configuration engine (<code>PCFG_INIT</code> timeout, errno 110), which left the fabric unconfigured. This is a different, harder failure than a silently ignored swap.</span></div>` : '') +
+      groups.map(([t, g]) => `<div class="rb"><h3>${t}</h3>${rows(g)}</div>`).join('') +
+      `<div class="axis" aria-hidden="true">${ticks}</div>` +
+      `<div class="keyline"><span><i class="k-bar"></i>miss rate</span><span><i class="k-ci"></i>95 % interval</span><span><i class="k-ref"></i>overall rate</span></div>` +
+      `<div class="strip">${sv}</div><div class="keyline"><span><i class="k-miss"></i>a swap the slot ignored, along the soak's clock</span></div>` +
+      `<details class="tbl"><summary>Table view</summary><table><tbody>${table}</tbody></table></details>`;
+    if (!reduced && window.anime) {
+      anime({ targets: '#relBody .bar', scaleX: [0, 1], delay: anime.stagger(35), duration: 500, easing: 'easeOutExpo' });
+      setTimeout(() => body.querySelectorAll('.bar').forEach((e) => (e.style.transform = '')), 1500);
+    }
+    // the Q&A answer follows the data: only claim "no difference" where the intervals overlap
+    const flat = [['direction', sk.by_direction], ['load path', sk.by_path], ['gap between swaps', sk.by_gap]];
+    const same = flat.filter(([, g]) => overlaps(g)).map(([n]) => n), diff = flat.filter(([, g]) => !overlaps(g)).map(([n]) => n);
+    const dm = sk.driver_ms || {};
+    $('qaFail').textContent = `Yes. About 1 swap in ${Math.round(1 / sk.rate)} (${pctf(sk.rate)} over a ${sk.swaps.toLocaleString()}-swap soak) is silently ignored: the driver is given the right bitstream and reports success, but the slot keeps its old contents, and later partial loads are ignored too until the whole device is reloaded. ` +
+      `The soak found ${same.length ? 'no difference by ' + same.join(', ') + ' (the 95 % intervals overlap)' : 'a difference in every grouping'}${diff.length ? `, but did see one by ${diff.join(', ')}` : ''}` +
+      `${dm.hit_median && dm.miss_median ? `; a driver load took ${dm.hit_median.toFixed(2)} ms on a hit and ${dm.miss_median.toFixed(2)} ms on a miss` : ''}. ` +
+      `The board server checks every swap and, on a miss, reloads the full bitstream, and the result box says so. ` +
+      (sk.incident ? `In the soak, the ${sk.incident.after_full_reloads + 1}th of those reloads failed outright: the configuration engine stopped answering (its INIT line stayed low) and left the fabric unconfigured, so the recovery itself is a risk. ` : '') + `The root cause is still open.`;
+  }
+  async function refreshSession() {
+    try {
+      const d = await api('api/soak'), ss = d.session;
+      $('relLive').textContent = `This server session: ${ss.swaps} swap${ss.swaps === 1 ? '' : 's'}, ${ss.misses} ignored, ${ss.recoveries} recovered by a full reload.`;
+      return d;
+    } catch { $('relLive').textContent = 'Simulation: the model never misses. The fault is in the hardware, so only a live board can show it here.'; return null; }
+  }
+  async function loadSoak() { const d = await refreshSession(); drawSoak(d && d.soak ? d.soak : SOAK_FALLBACK); }
+
+  // ---------- the board right now ----------
+  let sysTimer = null, sysAt = 0;
+  async function pollSys() {
+    if (!live) return;
+    try { const r = await api('api/system'); if (r.error) throw new Error(r.error); drawSys(r); }
+    catch { $('sysAge').textContent = 'no answer'; }
+  }
+  const dur = (s) => (s >= 86400 ? `${Math.floor(s / 86400)} d ${Math.floor(s % 86400 / 3600)} h` : s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.floor(s % 3600 / 60)} min` : `${Math.floor(s / 60)} min`);
+  function drawSys(sy) {
+    const box = $('sysBody');
+    if (!sy) { $('sysAge').textContent = ''; box.innerHTML = '<div class="empty">Not connected to a board. Serve this page from the PYNQ-Z2 (<code>board_server.py</code>) and its clock, configuration state, load and busiest processes appear here.</div>'; return; }
+    const used = sy.mem_mb.MemTotal - sy.mem_mb.MemAvailable;
+    $('sysAge').textContent = 'updates every 5 s';
+    box.innerHTML = `<div class="sysgrid">` +
+      `<div><span class="label">Core clock</span><b>${sy.fclk_mhz.toFixed(1)} MHz</b></div>` +
+      `<div><span class="label">Configuration</span><b>${sy.fpga_state || '–'}</b></div>` +
+      `<div><span class="label">Build loaded</span><b>${{ '62m5': '62.5 MHz', b3: 'b3 · 40 MHz' }[sy.build] || 'B2 · 50 MHz'}</b></div>` +
+      `<div><span class="label">Uptime</span><b>${sy.uptime_s ? dur(sy.uptime_s) : '–'}</b></div>` +
+      `<div><span class="label">Load average</span><b>${sy.load.slice(0, 2).join(' ')}</b></div>` +
+      `<div><span class="label">Memory in use</span><b>${(used / 1024).toFixed(1)} / ${(sy.mem_mb.MemTotal / 1024).toFixed(1)} GB</b></div></div>` +
+      (sy.ips && sy.ips.length ? `<p class="muted" style="font-size:13px;margin-top:10px">Board address on this network: ${sy.ips.map((a) => `<span class="mono">${a}</span>`).join(', ')}</p>` : '') +
+      `<div class="label" style="margin:12px 0 4px">Busiest processes · ${sy.cores} cores · names only</div>` +
+      `<table><thead><tr><th>PID</th><th>Process</th><th class="num">CPU %</th><th class="num">Mem %</th></tr></thead><tbody>${sy.procs.map((p) => `<tr><th>${p.pid}</th><td>${p.name.replace(/[<>&]/g, '')}</td><td class="num">${p.cpu}</td><td class="num">${p.mem}</td></tr>`).join('')}</tbody></table>`;
+  }
+
+  // ---------- boot: open at the halted state so the page shows a real result ----------
+  core.run(); paintSlot(); render(true);
+  paintBuild(); drawTimeline(MODEL('driver'), 'model'); drawSys(null); loadSoak();
+  if (window.frameElement && window.ResizeObserver) new ResizeObserver(() => { window.frameElement.style.height = document.documentElement.scrollHeight + 'px'; }).observe(document.body);
+  probe();
+})();
+</script>
+<script src="panels.js"></script>

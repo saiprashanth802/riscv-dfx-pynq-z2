@@ -1,0 +1,1227 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>RISC-V Slot Swap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root {
+  --bg: #F2F4F6; --panel: #FFFFFF; --ink: #16202A; --muted: #5B6B7A; --line: #D3DAE1; --grid: #E6EBF0;
+  --static: #2F6690; --static-soft: #DCE7F0; --rp: #B0306F; --rp-soft: #F7DDEA;
+  --ok: #2B7A3D; --warn: #A86200; --warn-soft: #FBEBD2;
+  --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0F161D; --panel: #16202A; --ink: #E2E8EE; --muted: #93A3B2; --line: #2B3A48; --grid: #1E2A35;
+    --static: #72A9D6; --static-soft: #1C3246; --rp: #EE78B2; --rp-soft: #43213A;
+    --ok: #63C07A; --warn: #E3A13B; --warn-soft: #3A2A12;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0F161D; --panel: #16202A; --ink: #E2E8EE; --muted: #93A3B2; --line: #2B3A48; --grid: #1E2A35;
+  --static: #72A9D6; --static-soft: #1C3246; --rp: #EE78B2; --rp-soft: #43213A;
+  --ok: #63C07A; --warn: #E3A13B; --warn-soft: #3A2A12;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--body); padding: 0 20px; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 20px 56px; display: grid; gap: 22px; }
+h1, h2 { font-family: var(--display); font-weight: 700; line-height: 1.1; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 4.6vw, 48px); letter-spacing: -0.01em; }
+h2 { font-size: 22px; }
+.label { font: 600 11px/1.2 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.mono, code { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+p { margin: 0; max-width: 68ch; }
+.muted { color: var(--muted); }
+
+/* header */
+header { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: end; justify-content: space-between; }
+header .sub { color: var(--muted); margin-top: 6px; }
+.badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel); font: 500 13px var(--body); }
+.badge .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.badge.live { border-color: var(--ok); }
+.badge.live .dot { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 25%, transparent); }
+
+/* headline figures */
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line);
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stat { background: var(--panel); padding: 14px 16px; display: grid; gap: 2px; }
+.stat b { font: 700 30px/1 var(--display); font-variant-numeric: tabular-nums; }
+.stat b small { font-size: 17px; font-weight: 600; margin-left: 2px; }
+.stat span { color: var(--muted); font-size: 13px; }
+
+/* main grid */
+.main { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 14px; }
+.panel-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; justify-content: space-between; }
+
+/* answer readout */
+.answer { display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; align-items: center;
+  padding: 14px 16px; border-radius: 8px; background: var(--rp-soft); }
+.answer .big { font: 700 64px/0.9 var(--display); color: var(--rp); font-variant-numeric: tabular-nums; min-width: 1.6ch; text-align: right; transition: transform .25s; }
+.answer .big.flip { transform: scale(1.12); }
+.answer .what { display: grid; gap: 2px; }
+.answer .what strong { font-size: 17px; }
+
+/* controls */
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button { font: 600 14px var(--body); padding: 8px 14px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--ink); }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--static); outline-offset: 2px; }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--rp); border-color: var(--rp); color: var(--panel); }
+button.primary:hover:not(:disabled) { filter: brightness(1.08); border-color: var(--rp); }
+.speed { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.speed input { width: 90px; accent-color: var(--static); }
+
+/* clock stages */
+.stages { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.stage { border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; display: grid; gap: 3px; min-height: 64px; }
+.stage .v { font: 13px/1.35 var(--mono); overflow-wrap: anywhere; }
+.stages.tick .stage { animation: tick .45s ease-out; }
+.stages.tick .stage:nth-child(2) { animation-delay: .06s; } .stages.tick .stage:nth-child(3) { animation-delay: .12s; } .stages.tick .stage:nth-child(4) { animation-delay: .18s; }
+@keyframes tick { from { background: var(--static-soft); } to { background: transparent; } }
+
+/* listing */
+.cpu { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; }
+.listing { font: 12.5px/1 var(--mono); max-height: 438px; overflow: auto; border: 1px solid var(--line); border-radius: 7px; margin: 0; padding: 4px 0; list-style: none; }
+.listing li { display: grid; grid-template-columns: 3.4ch 9ch 1fr; gap: 10px; padding: 4px 10px; white-space: pre; }
+.listing li .a { color: var(--muted); }
+.listing li .h { color: var(--muted); }
+.listing li.cfu .s { color: var(--rp); }
+.listing li.pc { background: var(--static-soft); outline: 1px solid var(--static); outline-offset: -1px; }
+.listing li.nop .s { color: var(--muted); font-style: italic; }
+
+/* registers + memory */
+.side { display: grid; gap: 12px; align-content: start; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+td, th { padding: 3px 6px; text-align: left; border-bottom: 1px solid var(--grid); }
+th { font-weight: 500; color: var(--muted); white-space: nowrap; }
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+td.note { color: var(--muted); font-size: 12px; }
+tr.cfuw td.num { color: var(--rp); }
+tr.dim { opacity: .45; }
+.flash { animation: flash 0.9s ease-out; }
+@keyframes flash { from { background: var(--warn-soft); } to { background: transparent; } }
+.slotbox { border: 1.5px solid var(--rp); border-radius: 7px; padding: 8px 10px; display: grid; gap: 4px; background: var(--rp-soft); }
+.slotbox .row { display: flex; flex-wrap: wrap; gap: 4px 12px; font: 12.5px var(--mono); }
+
+/* floorplan */
+.fp svg { width: 100%; height: auto; display: block; }
+.fp text { font-family: var(--body); }
+.status-line { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 14px; min-height: 26px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font: 600 12px var(--body); border: 1px solid var(--line); }
+.pill.run { color: var(--ok); border-color: var(--ok); }
+.pill.rst { color: var(--ink); border-color: var(--warn); background: var(--warn-soft); }
+.boardres { border: 1px solid var(--ok); background: color-mix(in srgb, var(--ok) 8%, var(--panel)); border-radius: 8px; padding: 8px 12px; font-size: 14px; display: grid; gap: 2px; }
+.boardres.bad { border-color: var(--warn); background: var(--warn-soft); }
+/* user programs + rick */
+.usr { display: grid; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); }
+.prog-row, .rickbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.prog-in { display: inline-flex; gap: 8px; align-items: center; }
+select, textarea, .prog-in input { font: 14px var(--mono); background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; }
+.prog-in input { width: 6.5em; }
+textarea { width: 100%; resize: vertical; line-height: 1.45; tab-size: 4; }
+textarea[readonly] { color: var(--muted); }
+.prog-out table { border-collapse: collapse; font: 13px var(--mono); }
+.prog-out td, .prog-out th { padding: 2px 10px 2px 0; text-align: left; font-weight: 400; }
+.prog-out th { color: var(--muted); }
+.cv { width: 100%; max-width: 512px; aspect-ratio: 4 / 3; image-rendering: pixelated; border: 1px solid var(--line); border-radius: 8px; background: #0b0f14; display: block; }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.path { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; }
+.path label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.log { font: 12.5px/1.6 var(--mono); max-height: 140px; overflow: auto; margin: 0; padding: 0; list-style: none; }
+
+/* chart + q&a */
+.lower { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.chart svg { width: 100%; height: auto; display: block; }
+.chart text { font-family: var(--body); fill: var(--muted); font-size: 11px; }
+.chart .val { fill: var(--ink); font-family: var(--mono); font-size: 11px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.legend i { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+details { border-bottom: 1px solid var(--grid); padding: 8px 0; }
+details summary { cursor: pointer; font-weight: 600; }
+details p { margin-top: 6px; color: var(--muted); font-size: 14px; }
+footer { color: var(--muted); font-size: 13px; }
+
+
+/* build toggle */
+.hdr-r { display: grid; gap: 8px; justify-items: end; }
+.seg { display: inline-flex; padding: 2px; gap: 2px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); }
+.seg label { position: relative; cursor: pointer; }
+.seg input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.seg span { display: block; padding: 6px 12px; border-radius: 7px; font: 600 13px var(--body); color: var(--muted); transition: background .18s, color .18s; }
+.seg input:checked + span { background: var(--rp-soft); color: var(--rp); }
+.seg input:focus-visible + span { outline: 2px solid var(--static); outline-offset: 1px; }
+.seg input:disabled { cursor: not-allowed; }
+.seg input:disabled + span { opacity: .45; }
+.buildnote { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; color: var(--muted); min-height: 24px; }
+.tag { display: inline-flex; align-items: center; gap: 5px; padding: 1px 9px; border-radius: 999px; font: 600 11.5px var(--body); border: 1px solid var(--line); white-space: nowrap; }
+.tag.ok { color: var(--ok); border-color: var(--ok); }
+.tag.pend { color: var(--ink); border-color: var(--warn); background: var(--warn-soft); }   /* ink, not amber: amber on its own tint is 4.06:1 in light mode */
+
+/* swap timeline */
+.tl { display: grid; gap: 8px; padding-top: 4px; border-top: 1px solid var(--grid); }
+.tl-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; align-items: baseline; padding-top: 10px; }
+.tl-bar { display: flex; gap: 2px; height: 28px; }
+.ph { min-width: 6px; border-radius: 3px; transform-origin: left center; background: var(--line); }
+.ph-reset { background: var(--muted); }
+.ph-load { background: var(--rp); }
+.ph-readback { background: var(--static); }
+.ph-re-read, .ph-full-reload { background: var(--warn); }
+.ph-full-reload { background-image: repeating-linear-gradient(135deg, transparent 0 4px, color-mix(in srgb, var(--panel) 50%, transparent) 4px 6px); }
+.tl-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 4px 14px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.tl-legend li { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: baseline; }
+.tl-legend i { width: 10px; height: 10px; border-radius: 2px; align-self: center; }
+.tl-legend b { font: 500 12.5px var(--mono); font-variant-numeric: tabular-nums; }
+
+/* reliability */
+.rel { display: grid; gap: 12px; }
+.relhead { display: grid; gap: 2px; }
+.relhead strong { font-size: 17px; line-height: 1.3; }
+.rb { display: grid; gap: 5px; }
+.rb h3 { margin: 6px 0 0; font: 600 12.5px var(--body); color: var(--muted); }
+.rrow { display: grid; grid-template-columns: minmax(92px, 140px) minmax(0, 1fr) minmax(104px, auto); gap: 10px; align-items: center; font-size: 13px; }
+.trk { position: relative; height: 16px; border-bottom: 1px solid var(--line);
+  background-image: linear-gradient(to right, var(--grid) 1px, transparent 1px); background-size: calc(100% / var(--ax)) 100%; }
+.trk .bar { position: absolute; left: 0; top: 3px; height: 10px; background: var(--static); border-radius: 0 4px 4px 0; transform-origin: left center; }
+.trk .ci { position: absolute; top: 7px; height: 2px; background: var(--ink); }
+.trk .ci::before, .trk .ci::after { content: ""; position: absolute; top: -3px; width: 1px; height: 8px; background: var(--ink); }
+.trk .ci::before { left: 0; } .trk .ci::after { right: 0; }
+.trk .ref { position: absolute; top: -2px; bottom: 0; border-left: 1px dashed var(--muted); }
+.axis { display: flex; justify-content: space-between; font: 11px var(--mono); color: var(--muted); padding-left: calc(min(140px, 28%) + 10px); }
+.strip svg { width: 100%; height: auto; display: block; }
+.strip text { font: 10.5px var(--mono); fill: var(--muted); }
+.keyline { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--muted); }
+.keyline i { display: inline-block; vertical-align: -1px; margin-right: 6px; }
+.k-bar { width: 14px; height: 8px; background: var(--static); border-radius: 0 3px 3px 0; }
+.k-ci { width: 14px; height: 2px; background: var(--ink); vertical-align: 2px !important; }
+.k-ref { width: 0; height: 11px; border-left: 1px dashed var(--muted); }
+.k-miss { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+
+/* board status */
+.sysgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.sysgrid div { background: var(--panel); padding: 8px 10px; display: grid; gap: 2px; }
+.sysgrid b { font: 600 15px var(--mono); font-variant-numeric: tabular-nums; }
+.empty { border: 1px dashed var(--line); border-radius: 8px; padding: 14px; color: var(--muted); font-size: 14px; }
+thead th.num { text-align: right; }
+details.tbl { border: 0; padding: 0; }
+details.tbl summary { font-weight: 500; font-size: 13px; color: var(--muted); }
+details.tbl table { margin-top: 6px; }
+
+@media (max-width: 900px) {
+  .main, .lower, .cpu { grid-template-columns: minmax(0, 1fr); }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .listing { max-height: 260px; }
+}
+@media (max-width: 520px) {
+  .sysgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body { padding: 0 16px; }
+  .stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .answer .big { font-size: 48px; }
+  .hdr-r { justify-items: start; }
+  .rrow { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; margin-bottom: 4px; }
+  .rrow .trk { grid-column: 1 / -1; grid-row: 2; }
+  .axis { padding-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="label">RV32I on Zynq-7020 · dynamic function exchange</div>
+      <h1>One core. One slot. Two accelerators.</h1>
+      <p class="sub">The same program runs on the same static logic. Swapping the partial bitstream in the reconfigurable slot changes the answer.</p>
+    </div>
+    <div class="hdr-r">
+      <span class="badge" id="mode" title="Live mode needs this page to be served by board_server.py on the PYNQ-Z2"><span class="dot"></span><span id="modeText">Simulation</span></span>
+      <div class="seg" role="radiogroup" aria-label="Hardware build">
+        <label><input type="radio" name="build" value="b2" checked><span>50 MHz · build B2</span></label>
+        <label><input type="radio" name="build" value="62m5"><span>62.5 MHz · registered CFU</span></label>
+        <label><input type="radio" name="build" value="b3"><span>40 MHz · b3, runs your programs</span></label>
+      </div>
+    </div>
+  </header>
+  <div class="buildnote" id="buildNote" aria-live="polite"></div>
+
+  <section class="stats" aria-label="Measured on the PYNQ-Z2, 18 Sep 2026">
+    <div class="stat"><b>2.5<small>ms</small></b><span>to swap the accelerator (kernel driver)</span></div>
+    <div class="stat"><b>111<small>KB</small></b><span>partial bitstream, 2.7 % of the full 4.0 MB</span></div>
+    <div class="stat"><b>26<small>×</small></b><span>faster than reloading the whole device</span></div>
+    <div class="stat"><b><i id="stClkV" style="font-style:normal">50</i><small>MHz</small></b><span id="stClkSub">core clock, read back from FCLK0</span></div>
+  </section>
+
+  <div class="main">
+    <!-- CPU -->
+    <section class="panel" aria-labelledby="cpuH">
+      <div class="panel-head">
+        <h2 id="cpuH">The core, one clock at a time</h2>
+        <span class="label mono" id="cyc">cycle 0 · pc 0x000</span>
+      </div>
+
+      <div class="answer">
+        <div class="big" id="ans">42</div>
+        <div class="what">
+          <span class="label">dmem word 4 · the program's answer</span>
+          <strong id="ansWhat">fn0 on (6, 7) → 6 × 7</strong>
+          <span class="muted" id="ansNote">Multiplier in the slot</span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="step" type="button">Step</button>
+        <button id="run" type="button">Run</button>
+        <button id="reset" type="button">Reset</button>
+        <button id="toEnd" type="button">Run to halt</button>
+        <label class="speed" for="speed">speed <input id="speed" type="range" min="1" max="30" value="6"> <span id="speedV" class="mono">6/s</span></label>
+      </div>
+
+      <div>
+        <div class="label" style="margin-bottom:6px">One clock of a single-cycle core</div>
+        <div class="stages" id="stages">
+          <div class="stage"><span class="label">Fetch</span><span class="v" id="sF">–</span></div>
+          <div class="stage"><span class="label">Decode</span><span class="v" id="sD">–</span></div>
+          <div class="stage"><span class="label">Execute</span><span class="v" id="sE">–</span></div>
+          <div class="stage"><span class="label">Write back</span><span class="v" id="sW">–</span></div>
+        </div>
+      </div>
+
+      <div class="cpu">
+        <div>
+          <div class="label" style="margin-bottom:6px" id="imemLbl">imem · sw/program.hex (41 instructions)</div>
+          <ol class="listing" id="listing"></ol>
+        </div>
+        <div class="side">
+          <div class="slotbox" aria-live="polite">
+            <span class="label">CFU slot · MMIO at 0xF000_0000</span>
+            <strong id="slotName">Multiplier (cfu_mul.v)</strong>
+            <div class="row"><span id="cA">op_a 0</span><span id="cB">op_b 0</span><span id="cF">fn 0</span><span id="cR">→ 0</span></div>
+          </div>
+          <div>
+            <div class="label" style="margin-bottom:4px">Registers</div>
+            <table><tbody id="regs"></tbody></table>
+          </div>
+          <div>
+            <div class="label" style="margin-bottom:4px">dmem · read over AXI GPIO on the board</div>
+            <table><tbody id="dmem"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- slot -->
+    <section class="panel fp" aria-labelledby="fpH">
+      <div class="panel-head">
+        <h2 id="fpH">Swap the slot</h2>
+        <span class="label">xc7z020clg400-1 · device view</span>
+      </div>
+      <svg id="fp" viewBox="0 0 400 290" role="img" aria-label="Zynq-7020 floorplan: processing system on the left, programmable logic on the right, the reconfigurable Pblock in clock region X1Y1"></svg>
+      <div class="status-line">
+        <span class="pill run" id="corePill">core running</span>
+        <span id="swapMsg" class="muted">Press swap: the core is held in reset while about 275 configuration frames stream into the Pblock.</span>
+      </div>
+      <div class="controls">
+        <button id="swap" class="primary" type="button">Swap to bitwise unit</button>
+        <div class="path" id="pathBox" hidden>
+          <label><input type="radio" name="path" id="pathDriver" value="driver" checked> kernel driver</label>
+          <label><input type="radio" name="path" id="pathPynq" value="pynq"> PYNQ Python API</label>
+        </div>
+      </div>
+      <div class="tl" id="tl">
+        <div class="tl-head"><span class="label" id="tlSrc">Swap timeline</span><span class="mono muted" id="tlTotal"></span></div>
+        <div class="tl-bar" id="tlBar" role="img" aria-label="Swap timeline"></div>
+        <ol class="tl-legend" id="tlLegend"></ol>
+      </div>
+      <p class="muted" style="font-size:13px">The animation runs about 500× slower than the real swap. Frames on 7-series parts span a full clock-region height, so the slot fills column by column. That is why partial-bitstream size follows Pblock width, not height.</p>
+      <div id="boardBox" hidden>
+        <div class="boardres" id="boardRes"></div>
+        <div class="label" style="margin:10px 0 4px">Swaps on the board this session</div>
+        <ol class="log" id="log"></ol>
+      </div>
+    </section>
+  </div>
+
+  <div class="usr" id="usr" hidden>
+    <section class="panel" aria-labelledby="progH">
+      <div class="panel-head"><h2 id="progH">Run a program on the core</h2><span class="label" id="progSrc"></span></div>
+      <div class="prog-row">
+        <select id="progSel" aria-label="Program"></select>
+        <span class="prog-in" id="progIn"></span>
+        <button id="progRun" class="primary" type="button">Run on the core</button>
+      </div>
+      <textarea id="progSrcTxt" spellcheck="false" rows="10" aria-label="Program source"></textarea>
+      <div class="boardres prog-out" id="progOut" hidden></div>
+      <p class="muted" style="font-size:13px" id="progNote"></p>
+    </section>
+    <section class="panel" aria-labelledby="rickH">
+      <div class="panel-head"><h2 id="rickH">A video, decoded by the core</h2><span class="label" id="rickSrc"></span></div>
+      <canvas class="cv" id="rickCv" width="96" height="64" role="img" aria-label="Video frame, 96 by 64 pixels, 8 colours"></canvas>
+      <div class="rickbar">
+        <button id="rickPlay" class="primary" type="button">Play</button>
+        <button id="rickSwap" type="button">Swap the slot</button>
+        <span class="pill run" id="rickSlot">–</span>
+      </div>
+      <p class="muted" style="font-size:13px" id="rickInfo"></p>
+    </section>
+  </div>
+
+  <div class="lower">
+    <section class="panel" aria-labelledby="relH">
+      <div class="panel-head"><h2 id="relH">How often does a swap fail?</h2><span class="label" id="relSrc">overnight swap soak</span></div>
+      <div class="rel" id="relBody"></div>
+      <p class="muted" style="font-size:13px" id="relLive"></p>
+    </section>
+    <section class="panel" aria-labelledby="sysH">
+      <div class="panel-head"><h2 id="sysH">The board right now</h2><span class="label" id="sysAge"></span></div>
+      <div id="sysBody"></div>
+    </section>
+  </div>
+  <div class="lower">
+    <section class="panel chart" aria-labelledby="chH">
+      <div class="panel-head">
+        <h2 id="chH">Swap vs full reload</h2>
+        <span class="label">measured · PYNQ-Z2 · 20 swaps per tier · log scale</span>
+      </div>
+      <svg id="chart" viewBox="0 0 560 250" role="img" aria-label="Log-scale bar chart. PYNQ API: partial 62.4 ms, full 585 ms. Kernel driver: partial 2.5 ms, full 66.3 ms. PCAP limit: partial 0.28 ms, full 10.1 ms."></svg>
+      <div class="legend"><span><i style="background:var(--line)"></i>full reload · 4.0 MB</span><span><i style="background:var(--rp)"></i>partial swap · 111 KB</span></div>
+      <p class="muted" style="font-size:13px">The driver path does a DMA setup, cache flush and completion poll on every load. That fixed cost is why 2.5 ms sits above the 0.28 ms PCAP limit, and why 26× trails the 36× size ratio. PYNQ adds about 60 ms of bit→bin conversion on top.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="qaH">
+      <h2 id="qaH">Questions we expect</h2>
+      <div>
+        <details><summary>Why not 0.28 ms?</summary><p>PCAP peak bandwidth is a floor. The Linux zynq-fpga driver adds DMA setup, cache maintenance and a completion poll per load, and at 111 KB that fixed cost dominates. PYNQ adds a bit→bin conversion and a /lib/firmware copy on every call.</p></details>
+        <details><summary>Why hold the core in reset instead of a DFX decoupler?</summary><p>Nothing static samples the slot while it changes, and the reset guarantees that. A decoupler is needed when the static side keeps running against the partition.</p></details>
+        <details><summary>What limits the core clock?</summary><p>The CFU result had to reach the register file in one cycle on a single-cycle machine: a path of roughly 16 ns, so 50 MHz (20 ns) closes with about 4 ns of slack and 62.5 MHz (16 ns) did not. The 62.5 MHz build registers the result in the static region, which costs one clock: software leaves one <code>nop</code> after every CFU start. It closes 16 ns with 1.18 ns of slack. The accelerators' source is unchanged, but each build has its own partial bitstreams (same size, different bytes): a partial is tied to the locked static design it was built against, so the page loads the matching pair when you switch builds.</p></details>
+        <details><summary>Why is the partition 111 KB for 81 LUTs?</summary><p>7-series configuration frames span a full clock-region height, so partial size scales with Pblock width, not with what is inside it. This is already the narrow geometry, one DSP column wide. It was 221 KB with two.</p></details>
+        <details><summary>Any failures?</summary><p id="qaFail">Yes. A swap is occasionally ignored: the driver is given the right bitstream and reports success, but the slot keeps its old contents, and later partial loads are ignored too until the whole device is reloaded. The board server checks every swap and, on a miss, reloads the full bitstream, and the result box says so. The root cause is still open.</p></details>
+      </div>
+    </section>
+  </div>
+
+  <footer>The simulation runs the same program.hex as the FPGA, and its results match the xsim testbench (demo/sim_check.js). Timings are measured on hardware. Source: riscv_pdr.</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/motion@11.18.2/dist/motion.js"></script>
+<script>
+// sim.js -- RV32I model of rtl/riscv_top.v running sw/program.hex (build B2 at 50 MHz, or the 62.5 MHz registered-CFU build), for demo/index.html.
+// Single-cycle, like the core: one step() = one instruction = one clock.
+// CFU behaviour is copied from rtl/cfu_mul.v and rtl/cfu_bitwise.v; MMIO map from sw/gen_hex.py.
+(function (root) {
+  // sw/gen_hex.py output, verbatim (41 instructions)
+  const PROGRAM = [
+    [0x00600093, 'addi x1,x0,6'], [0x00700113, 'addi x2,x0,7'],
+    [0x002081b3, 'add  x3,x1,x2'], [0x40110233, 'sub  x4,x2,x1'],
+    [0x00302023, 'sw   x3,0(x0)'], [0x00402223, 'sw   x4,4(x0)'],
+    [0xf00002b7, 'lui  x5,0xF0000'], [0x0012a023, 'sw   x1,0(x5)'],
+    [0x0022a223, 'sw   x2,4(x5)'],
+    [0x00000413, 'addi x8,x0,0'], [0x0082a423, 'sw   x8,8(x5)'], [0x00c2a483, 'lw   x9,12(x5)'], [0x00902823, 'sw   x9,16(x0)'],
+    [0x00100413, 'addi x8,x0,1'], [0x0082a423, 'sw   x8,8(x5)'], [0x00c2a483, 'lw   x9,12(x5)'], [0x00902a23, 'sw   x9,20(x0)'],
+    [0x00200413, 'addi x8,x0,2'], [0x0082a423, 'sw   x8,8(x5)'], [0x00c2a483, 'lw   x9,12(x5)'], [0x00902c23, 'sw   x9,24(x0)'],
+    [0x00300413, 'addi x8,x0,3'], [0x0082a423, 'sw   x8,8(x5)'], [0x00c2a483, 'lw   x9,12(x5)'], [0x00902e23, 'sw   x9,28(x0)'],
+    [0x000103b7, 'lui  x7,0x10'], [0x0072a023, 'sw   x7,0(x5)'], [0x0072a223, 'sw   x7,4(x5)'],
+    [0x00000413, 'addi x8,x0,0'], [0x0082a423, 'sw   x8,8(x5)'], [0x00c2a483, 'lw   x9,12(x5)'], [0x02902023, 'sw   x9,32(x0)'],
+    [0x00100413, 'addi x8,x0,1'], [0x0082a423, 'sw   x8,8(x5)'], [0x00c2a483, 'lw   x9,12(x5)'], [0x02902223, 'sw   x9,36(x0)'],
+    [0x00200413, 'addi x8,x0,2'], [0x0082a423, 'sw   x8,8(x5)'], [0x00c2a483, 'lw   x9,12(x5)'], [0x02902423, 'sw   x9,40(x0)'],
+    [0x0000006f, 'jal  x0,0'],
+  ];
+
+  // 62.5 MHz build (riscv_pdr_62m5/sw/gen_hex.py): the CFU result is registered, so one nop follows every
+  // `sw x8,8(x5)` (the fn write that starts a CFU op). Derived here so the two programs cannot drift apart.
+  const NOP = [0x00000013, 'nop'];
+  const PROGRAM_62M5 = PROGRAM.flatMap((ins) => (ins[1].startsWith('sw   x8,8(x5)') ? [ins, NOP] : [ins]));
+  const BUILDS = {
+    b2:    { program: PROGRAM,       registered: false, mhz: 50,   haltPc: 160 },
+    '62m5': { program: PROGRAM_62M5, registered: true,  mhz: 62.5, haltPc: 188 },
+    b3:    { program: PROGRAM,       registered: false, mhz: 40,   haltPc: 160 },   // B2 + PS program loader (rtl/imem.v, dmem.v): same timing model
+  };
+
+  const CFU_BASE = 0xF0000000;
+  const CFU = {
+    multiplier(a, b, fn) {                      // rtl/cfu_mul.v
+      const p = BigInt(a) * BigInt(b);
+      return Number(fn === 1 ? (p >> 32n) & 0xFFFFFFFFn : p & 0xFFFFFFFFn);
+    },
+    bitwise(a, b, fn) {                         // rtl/cfu_bitwise.v
+      if (fn === 0) { let c = 0; for (let i = 0; i < 32; i++) c += (a >>> i) & 1; return c; }
+      if (fn === 1) return (a & b) >>> 0;
+      if (fn === 2) return (a ^ b) >>> 0;
+      return a;
+    },
+  };
+
+  const sx = (v, bits) => (v << (32 - bits)) >> (32 - bits);
+
+  function decode(w) {
+    const op = w & 0x7f, rd = (w >>> 7) & 31, f3 = (w >>> 12) & 7, rs1 = (w >>> 15) & 31,
+      rs2 = (w >>> 20) & 31, f7 = w >>> 25;
+    const immI = w >> 20;
+    const immS = ((w >> 25) << 5) | ((w >>> 7) & 31);
+    const immB = sx(((w >>> 31) << 12) | (((w >>> 7) & 1) << 11) | (((w >>> 25) & 63) << 5) | (((w >>> 8) & 15) << 1), 13);
+    const immU = (w & 0xFFFFF000) | 0;
+    const immJ = sx(((w >>> 31) << 20) | (((w >>> 12) & 255) << 12) | (((w >>> 20) & 1) << 11) | (((w >>> 21) & 1023) << 1), 21);
+    return { op, rd, f3, rs1, rs2, f7, immI, immS, immB, immU, immJ };
+  }
+
+  function alu(f3, a, b, alt) {                 // signed 32-bit in, signed 32-bit out
+    switch (f3) {
+      case 0: return alt ? (a - b) | 0 : (a + b) | 0;
+      case 1: return a << (b & 31);
+      case 2: return a < b ? 1 : 0;
+      case 3: return (a >>> 0) < (b >>> 0) ? 1 : 0;
+      case 4: return a ^ b;
+      case 5: return alt ? a >> (b & 31) : (a >>> (b & 31)) | 0;
+      case 6: return a | b;
+      case 7: return a & b;
+    }
+  }
+
+  const REGN = (r) => 'x' + r;
+  const hex8 = (w) => (w >>> 0).toString(16).padStart(8, '0');
+  function disasm(w) {                          // RV32I subset the core implements; anything else prints as .word
+    const d = decode(w), rd = REGN(d.rd), a = REGN(d.rs1), b = REGN(d.rs2), alt = d.f7 === 0x20;
+    if (w === 0x13) return 'nop';
+    switch (d.op) {
+      case 0x33: return `${['add', 'sll', 'slt', 'sltu', 'xor', 'srl', 'or', 'and'][d.f3].replace('add', alt ? 'sub' : 'add').replace('srl', alt ? 'sra' : 'srl')} ${rd},${a},${b}`;
+      case 0x13: return d.f3 === 1 || d.f3 === 5
+        ? `${d.f3 === 1 ? 'slli' : alt ? 'srai' : 'srli'} ${rd},${a},${d.immI & 31}`
+        : `${['addi', '', 'slti', 'sltiu', 'xori', '', 'ori', 'andi'][d.f3]} ${rd},${a},${d.immI}`;
+      case 0x03: return d.f3 === 2 ? `lw ${rd},${d.immI}(${a})` : `.word 0x${hex8(w)}   (byte/half load: unsupported)`;
+      case 0x23: return d.f3 === 2 ? `sw ${b},${d.immS}(${a})` : `.word 0x${hex8(w)}   (byte/half store: unsupported)`;
+      case 0x63: return `${['beq', 'bne', '', '', 'blt', 'bge', 'bltu', 'bgeu'][d.f3]} ${a},${b},${d.immB}`;
+      case 0x37: return `lui ${rd},0x${((d.immU >>> 12) & 0xFFFFF).toString(16)}`;
+      case 0x17: return `auipc ${rd},0x${((d.immU >>> 12) & 0xFFFFF).toString(16)}`;
+      case 0x6f: return `jal ${rd},${d.immJ}`;
+      case 0x67: return `jalr ${rd},${d.immI}(${a})`;
+    }
+    return `.word 0x${hex8(w)}`;
+  }
+
+  class Core {
+    constructor(variant = 'multiplier', build = 'b2') { this.variant = variant; this.build = build; this.custom = null; this.reset(); }
+
+    get prog() { return this.custom ? this.custom.prog : BUILDS[this.build].program; }
+
+    // A user program ({imem: [word...], dmem: [word...]}), as produced by sw/rvasm.py or sw/c/build.sh.
+    // Uses the unregistered-CFU (B2 / b3) timing. null goes back to the baked demo program.
+    loadProgram(p) {
+      if (!p) { this.custom = null; this.reset(); return this; }
+      if (p.imem.length > 256) throw new Error(`program is ${p.imem.length} words, imem holds 256`);
+      this.custom = { prog: p.imem.map((w) => [w >>> 0, disasm(w)]), dmem: Uint32Array.from(p.dmem || []) };
+      this.reset(); return this;
+    }
+
+    // Like the board: reset restarts the core but dmem keeps its contents (keepMem), or returns to the image loaded
+    // with the program (power-on state).  poke/peek are the PS-side write and debug ports.
+    reset(keepMem = false) {
+      const old = this.dmem;
+      this.pc = 0; this.x = new Int32Array(32);
+      this.dmem = new Uint32Array(1024);
+      if (keepMem && old) this.dmem.set(old); else if (this.custom) this.dmem.set(this.custom.dmem.subarray(0, 1024));
+      this.cfu = { a: 0, b: 0, fn: 0, q: 0 }; this.cycles = 0; this.halted = false; this.last = null; this.fault = null;
+    }
+    peek(word) { return this.dmem[word & 1023]; }
+    poke(word, v) { this.dmem[word & 1023] = v >>> 0; }
+
+    load(addr) {
+      addr >>>= 0;
+      if (addr >= CFU_BASE) {
+        if (addr !== CFU_BASE + 12) return 0;
+        return BUILDS[this.build].registered ? this.cfu.q : CFU[this.variant](this.cfu.a, this.cfu.b, this.cfu.fn);
+      }
+      return this.dmem[(addr >>> 2) & 1023];
+    }
+
+    store(addr, v) {
+      addr >>>= 0; v >>>= 0;
+      if (addr >= CFU_BASE) { this.cfu[['a', 'b', 'fn'][(addr - CFU_BASE) >>> 2]] = addr === CFU_BASE + 8 ? v & 15 : v; return 'cfu'; }
+      this.dmem[(addr >>> 2) & 1023] = v; return 'dmem';
+    }
+
+    // one clock: fetch, decode, execute, write back. Returns what happened, for the UI.
+    step() {
+      const P = this.prog, idx = this.pc >>> 2, w = P[idx] ? P[idx][0] : 0x13;   // off the end = nop
+      const d = decode(w), x = this.x, a = x[d.rs1], b = x[d.rs2];
+      // result_q <= result at every clock edge, computed from the operand registers as they were BEFORE this edge
+      const qNext = CFU[this.variant](this.cfu.a, this.cfu.b, this.cfu.fn);
+      let next = (this.pc + 4) | 0, wr = null, mem = null;
+      switch (d.op) {
+        case 0x33: wr = alu(d.f3, a, b, d.f7 === 0x20); break;
+        case 0x13: wr = alu(d.f3, a, d.f3 === 5 ? d.immI & 31 : d.immI, d.f3 === 5 && d.f7 === 0x20); break;
+        // rtl/control.v never looks at funct3 on loads/stores: lb/lh/sb/sh would run as lw/sw on the board and
+        // quietly compute the wrong thing.  The model refuses to run them, so sim == board holds for every program that runs.
+        case 0x03: {
+          if (d.f3 !== 2) { this.fault = `byte/half load at pc ${this.pc}: the core is word-only`; next = this.pc; break; }
+          const addr = (a + d.immI) | 0;
+          wr = this.load(addr) | 0;
+          mem = { kind: addr >>> 0 >= CFU_BASE ? 'cfu-read' : 'load', addr: addr >>> 0 }; break;
+        }
+        case 0x23: {
+          if (d.f3 !== 2) { this.fault = `byte/half store at pc ${this.pc}: the core is word-only`; next = this.pc; break; }
+          const addr = (a + d.immS) | 0;
+          mem = { kind: this.store(addr, b), addr: addr >>> 0 }; break;
+        }
+        case 0x63: {
+          const t = [a === b, a !== b, 0, 0, a < b, a >= b, (a >>> 0) < (b >>> 0), (a >>> 0) >= (b >>> 0)][d.f3];
+          if (t) next = (this.pc + d.immB) | 0; break;
+        }
+        case 0x37: wr = d.immU; break;
+        case 0x17: wr = (this.pc + d.immU) | 0; break;
+        case 0x6f: wr = next; next = (this.pc + d.immJ) | 0; break;
+        case 0x67: wr = next; next = ((a + d.immI) & ~1) | 0; break;
+      }
+      if (wr !== null && d.rd !== 0) x[d.rd] = wr;
+      this.cfu.q = qNext;
+      this.halted = next === this.pc;
+      this.last = { pc: this.pc, idx, word: w, asm: P[idx] ? P[idx][1] : 'nop', rd: wr !== null ? d.rd : 0, mem };
+      this.pc = next; this.cycles++;
+      return this.last;
+    }
+
+    run(max = 1000) { while (!this.halted && max--) this.step(); return this; }
+  }
+
+  const RV = { PROGRAM, PROGRAM_62M5, BUILDS, CFU, Core, disasm };
+  root.RV = RV;
+  if (typeof module !== 'undefined') module.exports = RV;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script>
+window.APPS = {"asm":{"sum10":{"src":"    addi x1, x0, 0       # sum\n    addi x2, x0, 1       # i\n    addi x3, x0, 11      # limit\nloop:\n    add  x1, x1, x2\n    addi x2, x2, 1\n    blt  x2, x3, loop\n    sw   x1, 0(x0)       # mem[0] = 55\ndone:\n    j    done            # halt\n","imem":[147,1048851,11534739,2130099,1114387,4264643811,1056803,111]}},"c":{"calc":{"imem":[268439863,58720495,111,4026533815,10985507,12034595,500771,13083907,32871,4026533815,10985507,500259,500771,13083907,32871,4278255891,1123875,8463395,9511459,18948131,268437431,268936323,273131779,591251,296211,151,4202725607,328723,268437431,10985507,296211,151,4202725607,268437431,10986019,19199155,9937955,1311763,8889891,1299,12656771,8463363,4269187,76035,16843027,32871],"dmem":[],"src":"/* The thesis in nine lines.  Operands come from IN[], written by the loader AFTER the program is loaded, so gcc cannot\n   fold them: `*` is a real call to __mulsi3 and popcount a real call to __popcountsi2, both served by the slot.\n   OUT[0] = a*b  OUT[1] = popcount(a)  OUT[2] = a & b (plain RV32I, slot-independent)  OUT[3] = a*b + 1 */\n#include \"prog.h\"\nint main(void) {\n    uint32_t a = IN[0], b = IN[1];\n    OUT[0] = a * b;\n    OUT[1] = (uint32_t)__builtin_popcount(a);\n    OUT[2] = a & b;\n    OUT[3] = a * b + 1;\n    return 0;\n}\n","blurb":"a \u00d7 b and popcount(a): both are libcalls that land in the slot"},"bench":{"imem":[268439863,33554671,111,4026533815,10985507,12034595,500771,13083907,32871,4261478675,1125923,9513507,18950179,19998243,21046307,22094371,268437431,268937731,273132163,277324931,281520515,134876771,8465443,1344659,1049619,2323,37748847,296339,151,4190142695,329363,14223667,1311763,1344659,42626147,9078067,4228488931,624275,296851,4261708003,33003027,1106663187,10975027,15107763,1381651,1562515,4261909731,4229951599,25240579,268437431,19374115,1299,29433987,21046403,16853251,12659075,8464899,4270723,33620243,32871,657683,4246728815],"dmem":[],"src":"/* Software shift-add multiply vs the slot, same inputs.  IN[0]=n  IN[1]=x0  IN[2]=y0  IN[3]=mode (0 soft, 1 `*`).\n   acc = sum over i=1..n of (x0+i)*(y0+i) mod 2^32.  The PL cycle counter gives the cost of each mode; with the multiplier in\n   the slot both modes agree, with the bitwise unit `*` returns popcount(a) and the checksums differ. */\n#include \"prog.h\"\nstatic uint32_t soft_mul(uint32_t a, uint32_t b) {\n    uint32_t r = 0;\n    while (b) { if (b & 1) r += a; a <<= 1; b >>= 1; }\n    return r;\n}\nint main(void) {\n    uint32_t n = IN[0], x0 = IN[1], y0 = IN[2], mode = IN[3], acc = 0;\n    for (uint32_t i = 1; i <= n; i++) {\n        uint32_t x = x0 + i, y = y0 + i;\n        acc += mode ? x * y : soft_mul(x, y);\n    }\n    OUT[0] = acc;\n    return 0;\n}\n","blurb":"software shift-add multiply vs the slot, counted in clock cycles"},"rick":{"imem":[268439863,8388847,111,268441527,2420613891,2416420739,495203,268437431,268441399,2416379667,499747,4687763,4276591843,67309155,1683,268441399,2424768275,268439351,4026535607,5146771,9340947,2100755,13534483,468867,2594707,31950771,501123,4662787,12492835,13148195,29892643,337411,13082659,1476243,8849171,4241692899,1299,32871],"dmem":[],"src":"/* One video frame, or one chunk of a frame, per run.  dmem: fb[0..575] (96x64, three 1 bpp planes R G B of 192 words,\n   kept between runs)  W[576] = clear flag  W[577] = n  W[578..] = idx, val, idx, val ...   fb[idx] ^= val, with the XOR\n   done by fn 2 of the slot.  A key frame is larger than dmem has room for, so the PS feeds it in chunks of at most\n   200 pairs: 578 + 400 words stops below the stack, which starts at word 1023.\n   No `*` anywhere on purpose: with the wrong unit loaded a `*` would corrupt the loop's own addressing instead of\n   the picture (build.sh --no-cfu-libcalls enforces this). */\n#include \"prog.h\"\n#define FB 576\nint main(void) {\n    volatile uint32_t *fb = DMEM, *p = DMEM + FB + 2;\n    uint32_t n = DMEM[FB + 1];\n    if (DMEM[FB]) for (int i = 0; i < FB; i++) fb[i] = 0;\n    for (uint32_t k = 0; k < n; k++, p += 2) {\n        uint32_t idx = p[0];\n        fb[idx] = cfu_call(2, fb[idx], p[1]);\n    }\n    return 0;\n}\n","blurb":"the video decoder"}},"clip":{"w":96,"h":64,"words":576,"fps":10,"key":10,"frames":[{"c":1,"p":[228,264241152,230,1008,231,535822336,233,4088,234,1073217536,236,8188,237,2146959360,239,8190,240,2147221504,242,16382,243,4294705152,245,16383,246,4294705152,248,16383,249,4294705152,251,16383,252,4294705152,254,16383,255,4294705152,257,16383,258,4294705152,260,16383,261,4294705152,263,16383,264,4294705152,266,16383,267,4294705152,269,16383,270,4294705152,272,16383,273,2147221504,275,16382,276,2146959360,278,8190,279,1073217536,281,8188,282,535822336,284,4088,285,264241152,287,1008,316,33554496,319,125829600,322,266340336,325,268435440,328,134217696,331,33554304,334,16776960,337,1044480,420,264241152,422,1008,423,535822336,425,4088,426,1073217536,428,8188,429,2146959360,431,8190,432,2147221504,434,16382,435,4294705152,437,16383,438,4294705152,440,16383,441,4294705152,443,16383,444,4294705152,446,16383,447,4294705152,449,16383,450,4294705152,452,16383,453,4294705152,455,16383,456,4294705152,458,16383,459,4294705152,461,16383,462,4294705152,464,16383,465,2147221504,467,16382,468,2146959360,470,8190,471,1073217536,473,8188,474,535822336,476,4088,477,264241152,479,1008,508,33554496,511,125829600,514,266340336,517,268435440,520,134217696,523,33554304,526,16776960,529,1044480]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[228,264241152,230,1008,231,535822336,233,4088,234,538443776,236,6148,237,1073741824,239,2,240,2147483648,242,1,243,131072,245,16384,246,131072,247,2147483649,248,16384,249,266534912,250,2147483649,251,51184,252,1073414144,253,3221225475,254,57340,255,2147418112,256,3221225475,257,65534,258,4294901760,259,3221225475,260,65535,261,4294770688,262,3221225475,263,49151,264,4294770688,265,2147483649,266,49151,267,4294705152,269,16383,270,4294705152,272,16383,273,2147221504,275,16382,276,2146959360,278,8190,279,1073217536,281,8188,282,535822336,284,4088,285,264241152,287,1008,316,33554496,319,1065353724,322,1880098830,325,1879048206,328,2013265950,331,1040187516,334,520093944,337,267390960,340,268435440,343,134217696,346,134217696,349,67108800,352,33554304,355,8388096,358,4193280,361,98304,420,264241152,422,1008,423,535822336,425,4088,426,538443776,428,6148,429,1073741824,431,2,432,2147483648,434,1,435,131072,437,16384,438,131072,439,2147483649,440,16384,441,266534912,442,2147483649,443,51184,444,1073414144,445,3221225475,446,57340,447,2147418112,448,3221225475,449,65534,450,4294901760,451,3221225475,452,65535,453,4294770688,454,3221225475,455,49151,456,4294770688,457,2147483649,458,49151,459,4294705152,461,16383,462,4294705152,464,16383,465,2147221504,467,16382,468,2146959360,470,8190,471,1073217536,473,8188,474,535822336,476,4088,477,264241152,479,1008,508,33554496,511,1065353724,514,1880098830,517,1879048206,520,2013265950,523,1040187516,526,520093944,529,267390960,532,268435440,535,134217696,538,134217696,541,67108800,544,33554304,547,8388096,550,4193280,553,98304]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":1,"p":[228,264241152,230,1008,231,1072693248,233,4092,234,2147221504,236,16382,237,4294836224,239,32767,240,4278059008,241,2147483649,242,32639,243,4030660608,244,2147483649,245,64527,246,3760128000,247,3221225475,248,63495,249,3760128000,250,3221225475,251,63495,252,3759079424,253,3221225475,254,61447,255,3222208512,256,3221225475,257,61443,258,3222208512,259,3221225475,260,61443,261,3759079424,262,3221225475,263,61447,264,3760128000,265,3221225475,266,63495,267,3760128000,268,3221225475,269,63495,270,4030660608,271,2147483649,272,64527,273,4278059008,274,2147483649,275,32639,276,4294836224,278,32767,279,2147221504,281,16382,282,1072693248,284,4092,285,264241152,287,1008,313,516096,316,1044480,319,2095104,322,2095104,325,2095104,328,1996800,331,2095104,334,2095104,337,1044480,340,516096,420,264241152,422,1008,423,1072693248,425,4092,426,2147221504,428,16382,429,4294836224,431,32767,432,4278059008,433,2147483649,434,32639,435,4030660608,436,2147483649,437,64527,438,3760128000,439,3221225475,440,63495,441,3760128000,442,3221225475,443,63495,444,3759079424,445,3221225475,446,61447,447,3222208512,448,3221225475,449,61443,450,3222208512,451,3221225475,452,61443,453,3759079424,454,3221225475,455,61447,456,3760128000,457,3221225475,458,63495,459,3760128000,460,3221225475,461,63495,462,4030660608,463,2147483649,464,64527,465,4278059008,466,2147483649,467,32639,468,4294836224,470,32767,471,2147221504,473,16382,474,1072693248,476,4092,477,264241152,479,1008,505,516096,508,1044480,511,2095104,514,2095104,517,2095104,520,1996800,523,2095104,526,2095104,529,1044480,532,516096]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[228,264241152,230,1008,231,1072693248,233,4092,234,2147221504,236,16382,237,4294836224,239,32767,240,4278059008,241,2147483649,242,32639,243,4024369152,244,2147483649,245,64503,246,534970368,247,3221225475,248,51192,249,534839296,250,3221225475,251,34808,252,535887872,253,1073741826,254,36856,255,806354944,256,1073741826,257,2060,258,524288,260,4096,261,1611399168,263,12294,264,3760062464,266,30727,267,3760062464,268,1073741826,269,30727,270,4030660608,271,2147483649,272,64527,273,4278059008,274,2147483649,275,32639,276,4294836224,278,32767,279,2147221504,281,16382,282,1072693248,284,4092,285,264241152,287,1008,313,940040220,316,2147483646,319,2145388542,322,2145388542,325,1071646716,328,534874104,331,266340336,334,132122592,337,133173216,340,66592704,343,33554304,346,4193280,349,98304,420,264241152,422,1008,423,1072693248,425,4092,426,2147221504,428,16382,429,4294836224,431,32767,432,4278059008,433,2147483649,434,32639,435,4024369152,436,2147483649,437,64503,438,534970368,439,3221225475,440,51192,441,534839296,442,3221225475,443,34808,444,535887872,445,1073741826,446,36856,447,806354944,448,1073741826,449,2060,450,524288,452,4096,453,1611399168,455,12294,456,3760062464,458,30727,459,3760062464,460,1073741826,461,30727,462,4030660608,463,2147483649,464,64527,465,4278059008,466,2147483649,467,32639,468,4294836224,470,32767,471,2147221504,473,16382,474,1072693248,476,4092,477,264241152,479,1008,505,940040220,508,2147483646,511,2145388542,514,2145388542,517,1071646716,520,534874104,523,266340336,526,132122592,529,133173216,532,66592704,535,33554304,538,4193280,541,98304]},{"c":0,"p":[243,534773760,245,2040,246,4294705152,248,16383,249,3760062464,251,30727,252,3221618688,253,2147483649,254,24579,255,266403840,256,2147483649,257,34800,258,1073283072,259,1073741826,260,40956,261,1074003968,263,8194,264,2147614720,266,16385,268,1073741826,270,65536,271,2147483649,272,32768,307,939524124,310,2146439166,313,1207959522,316,1074786306,319,1879048206,322,1879048206,325,939524124,328,469762104,331,260047344,334,130024416,337,134217696,340,67108800,343,33554304,346,4193280,349,98304,435,534773760,437,2040,438,4294705152,440,16383,441,3760062464,443,30727,444,3221618688,445,2147483649,446,24579,447,266403840,448,2147483649,449,34800,450,1073283072,451,1073741826,452,40956,453,1074003968,455,8194,456,2147614720,458,16385,460,1073741826,462,65536,463,2147483649,464,32768,499,939524124,502,2146439166,505,1207959522,508,1074786306,511,1879048206,514,1879048206,517,939524124,520,469762104,523,260047344,526,130024416,529,134217696,532,67108800,535,33554304,538,4193280,541,98304]},{"c":0,"p":[249,534773760,251,2040,252,1073217536,254,8188,255,4294836224,257,32767,258,3760062464,259,2147483649,260,30727,261,1073414144,262,3221225475,263,57340,264,2147287040,265,1073741826,266,49150,267,3221618688,269,24579,270,131072,271,1073741826,272,16384,273,65536,274,2147483649,275,32768,304,2146439166,307,1207959522,310,1611657222,313,1879048206,316,939524124,319,234881136,322,264242160,325,134217696,328,67108800,331,8388096,334,4193280,441,534773760,443,2040,444,1073217536,446,8188,447,4294836224,449,32767,450,3760062464,451,2147483649,452,30727,453,1073414144,454,3221225475,455,57340,456,2147287040,457,1073741826,458,49150,459,3221618688,461,24579,462,131072,463,1073741826,464,16384,465,65536,466,2147483649,467,32768,496,2146439166,499,1207959522,502,1611657222,505,1879048206,508,939524124,511,234881136,514,264242160,517,134217696,520,67108800,523,8388096,526,4193280]},{"c":0,"p":[258,534773760,260,2040,261,4294705152,263,16383,264,4294836224,265,2147483649,266,32767,267,4294901760,268,3221225475,269,65535,270,4294770688,271,1073741826,272,49151,273,3221618688,274,1073741826,275,24579,276,65536,277,3221225475,278,32768,298,2146439166,301,2147483646,304,1880092686,307,2013265950,310,528482808,313,268435440,316,134217696,319,33554304,322,4193280,450,534773760,452,2040,453,4294705152,455,16383,456,4294836224,457,2147483649,458,32767,459,4294901760,460,3221225475,461,65535,462,4294770688,463,1073741826,464,49151,465,3221618688,466,1073741826,467,24579,468,65536,469,3221225475,470,32768,490,2146439166,493,2147483646,496,1880092686,499,2013265950,502,528482808,505,268435440,508,134217696,511,33554304,514,4193280]},{"c":0,"p":[267,1073217536,269,8188,270,4294836224,271,2147483649,272,32767,273,3221684224,274,3221225475,275,57347,276,65536,277,3221225475,278,32768,279,4294836224,280,2147483649,281,32767,282,65536,283,3221225475,284,32768,295,2147483646,298,2014310430,301,2147385342,304,268435440,307,134217696,310,8388096,459,1073217536,461,8188,462,4294836224,463,2147483649,464,32767,465,3221684224,466,3221225475,467,57347,468,65536,469,3221225475,470,32768,471,4294836224,472,2147483649,473,32767,474,65536,475,3221225475,476,32768,487,2147483646,490,2014310430,493,2147385342,496,268435440,499,134217696,502,8388096]},{"c":0,"p":[279,4294836224,280,2147483649,281,32767,282,65536,283,3221225475,284,32768,285,4294705152,287,16383,289,268435440,295,2147483646,298,134217696,301,98304,471,4294836224,472,2147483649,473,32767,474,65536,475,3221225475,476,32768,477,4294705152,479,16383,481,268435440,487,2147483646,490,134217696,493,98304]},{"c":1,"p":[93,4294965248,94,4294967295,95,2097151,285,4294965248,286,4294967295,287,2097151,477,4294965248,478,4294967295,479,2097151]},{"c":0,"p":[93,4192256,95,2096640,285,4192256,287,2096640,477,4192256,479,2096640]},{"c":0,"p":[93,4290772992,94,3221225473,95,511,285,4290772992,286,3221225473,287,511,477,4290772992,478,3221225473,479,511]},{"c":0,"p":[94,1073221630,286,1073221630,478,1073221630]},{"c":0,"p":[94,520192,281,3221225472,282,4227858432,283,31,284,939524096,285,62914560,286,4294574048,287,117440515,288,3145735,289,126976,290,12582972,291,983096,293,3934144,294,65472,296,260096,408,16777472,409,16777472,410,16777472,456,16777472,457,16777472,458,16777472,478,520192,504,16777472,505,16777472,506,16777472,552,16777472,553,16777472,554,16777472]},{"c":0,"p":[275,4026531840,278,201326592,279,4286578688,280,1,281,3271557120,282,4235198464,283,1,284,952107008,285,63438848,286,2147487232,287,119537667,288,3538951,289,2147487232,290,14155839,291,950328,293,3803084,294,40897,296,161904,297,6158,299,32640,300,2032]},{"c":0,"p":[269,2113929216,272,2172649472,273,266338304,275,4030726144,276,806879232,278,204472320,279,1065746432,280,1,281,50855936,282,7405568,283,29,284,12845056,285,557056,286,2013266428,287,2228224,288,409600,289,3087009760,290,1671171,291,110592,292,3221227008,293,409612,294,26625,296,110707,297,7182,299,29596,300,1520,302,992,303,385,306,126]},{"c":0,"p":[263,25165824,266,241172480,267,16515072,269,1847066624,270,50528256,272,2709782528,273,199262208,275,1078067200,276,672677888,278,2150694912,279,3758497792,281,557056,282,1073811456,283,3,284,278528,285,2147518464,286,125829149,287,139264,288,17408,289,998250982,290,102400,291,12800,292,3422558264,293,18432,294,2304,295,805306816,296,13827,297,1152,298,3221225472,299,3485,300,576,302,926,303,417,306,110,309,12,312,3]},{"c":0,"p":[260,7864320,261,1032192,263,17170432,264,3153920,266,224460800,267,12324864,269,337149952,270,58918912,272,671367168,273,83919872,275,1208098816,276,436224512,278,2415988736,279,603988480,281,536905728,282,1207963904,284,1073759232,285,2415921280,286,7864321,287,1073750528,288,536872000,289,66584582,290,2147488000,291,3221226048,292,226494008,293,2176,294,288,295,905971395,296,1600,297,144,298,4160749820,299,433,300,80,301,3221225472,302,113,303,40,306,20,309,14,312,2,458,16777216]},{"c":0,"p":[252,8192,255,120832,257,491520,258,132608,260,6307840,261,770304,263,10891264,264,3678464,266,54593536,267,5247104,269,75531264,270,10487872,272,142623744,273,18875456,275,151003648,276,37749280,278,301994240,279,75498000,281,570427520,282,150995216,284,1140851776,285,285212808,286,491520,287,1207960096,288,570425416,289,6787072,290,2281701648,291,3288334404,292,31462400,293,268435592,294,134217762,295,125830147,296,268435524,297,268435474,298,3053453372,299,536870963,300,1610612753,301,2952790064,302,1073741839,303,2147483656,304,15,305,1073741824,306,4,308,2147483648,309,2,312,1,456,256,458,16777216]},{"c":1,"p":[246,1792,249,6272,252,8256,255,16416,257,63488,258,32784,260,67072,261,65552,263,131328,264,65544,266,262272,267,131076,269,524416,270,262148,272,1048640,273,262146,275,2097184,276,524290,278,2097168,279,1048577,281,4194312,282,1048576,284,4194308,285,2097152,286,129024,287,8388610,288,2097152,289,919040,290,8388609,291,4194304,292,2150629632,293,16777216,294,8388608,295,1623195776,296,16777216,297,8388608,298,520093792,299,33554432,300,16777216,301,16,302,33554432,303,33554432,304,8,305,67108864,306,201326592,307,6,308,134217728,309,4026531840,310,1,311,134217728,314,268435456,317,268435456,320,536870912,323,1073741824,326,2147483648,408,16777472,409,16777472,410,16777472,456,16777472,457,16777472,458,16777472,504,16777472,505,16777472,506,16777472,552,16777472,553,16777472,554,16777472]},{"c":0,"p":[240,240,243,264,246,1284,249,7300,252,10306,254,1536,255,20513,257,57728,258,36880,260,75328,261,73744,263,147744,264,73736,266,295056,267,147460,269,589960,270,278532,272,1114180,273,294914,275,2228258,276,589826,278,2228241,279,1114113,281,4456457,282,1179648,283,2147515904,284,4456452,285,2228224,286,1073772800,287,8912898,288,2359296,289,805832384,290,8912897,291,4456448,292,2349334816,293,17825792,294,8912896,295,1660944528,296,17825792,297,8912896,298,520093800,299,35651584,300,17825792,301,20,302,35651584,303,34603008,304,10,305,71303168,306,203423744,307,7,308,138412032,309,1883242496,310,1,311,142606336,312,1082130432,314,276824064,315,855638016,317,285212672,318,201326592,320,570425344,323,1107296256,326,2214592512,329,134217728,332,402653184,335,3758096384]},{"c":0,"p":[234,14,237,49,240,176,243,328,246,644,249,1284,252,2306,254,1536,255,4609,257,6256,258,4608,260,8776,261,9216,263,17444,264,9216,266,34834,267,18432,269,69641,270,18432,271,2147483648,272,69636,273,34816,274,1073741824,275,139266,276,69632,277,536872704,278,147457,279,69632,280,268449984,281,278529,282,139264,283,2281717280,284,294912,285,139264,286,1140850960,287,557056,288,278528,289,855638216,290,589824,291,278528,292,213909540,293,1114112,294,540672,295,62914578,296,1179648,297,557056,298,9,299,2228224,300,1081344,301,5,302,2228224,303,2148597760,304,2,305,4456448,306,1075904512,307,1,308,4456448,309,3225550848,311,8912896,312,1619263488,314,8912896,315,587464704,317,17825792,318,67633152,320,34603008,321,68157440,323,35651584,324,65011712,326,69206016,329,2285895680,332,1484783616,335,2692743168,338,855638016,341,201326592]},{"c":0,"p":[231,3,234,10,237,53,240,72,243,80,246,144,249,288,252,288,255,544,257,508,258,576,260,571,261,1088,262,2147483648,263,1092,264,1152,265,1073741824,266,2178,267,2176,268,536870912,269,4353,270,2176,271,2415919584,272,4608,273,2304,274,1207961112,275,8704,276,4352,277,603983620,278,17408,279,4352,280,301992130,281,17408,282,8704,283,150994978,284,34816,285,8704,286,79691793,287,34816,288,2147501056,289,54001672,290,69632,291,2147501056,292,16252932,293,69632,294,1073759232,295,2,296,139264,297,536905728,298,1,299,139264,300,536905728,301,1,302,147456,303,2415988736,305,278528,306,1342246912,308,2147762176,309,1208098816,311,2148040704,312,604250112,314,1074298880,315,335822848,317,1074855936,318,168312832,320,537985024,321,101744640,323,539099136,324,48267264,326,539099136,327,8454144,329,2420375552,330,4325376,332,1216610304,333,3932160,335,1216872448,338,923795456,341,236978176,344,29360128]},{"c":0,"p":[231,3,234,4,237,4,240,9,243,17,246,18,249,34,252,36,255,36,257,12,258,68,260,51,261,72,262,1610612744,263,67,264,136,265,1342177398,266,140,267,136,268,671088769,269,272,270,2147483792,271,335544544,272,528,273,1073742096,274,184549400,275,2147484192,276,1073742096,277,75497476,278,2147484736,279,536871200,280,37756930,281,1073742912,282,536871456,283,18898946,284,1073744000,285,268436000,286,14434305,287,1073744000,288,2281702464,289,3932160,290,536875264,291,2281702464,293,536875264,294,1140851776,296,536879616,297,603981952,299,268444160,300,570427520,302,268452864,303,301994112,305,268452864,306,301994240,308,2281719808,309,151003392,311,2281736192,312,83894784,314,1207996416,315,75514368,317,1140920320,318,41959936,320,604049408,321,37782528,323,570564608,324,21005312,326,570564608,327,10553344,329,302268416,330,5376000,332,151289856,333,2887680,335,151552000,336,532480,338,76611584,339,270336,341,39976960,342,245760,344,32899072,347,524288,504,16777216]},{"c":0,"p":[239,2147483648,240,1,242,2147483648,243,1,245,1073741824,246,2,248,1073741824,249,2,251,1073741824,252,4,253,1,254,536870912,255,3221225476,256,6,257,536870912,258,536870916,259,24,260,536870912,261,268435464,262,3758096424,263,268435459,264,268435464,265,671088694,266,268435468,267,134217736,268,3456106689,269,268435472,270,2214592529,271,83886464,272,134217745,273,1140850705,274,58722048,275,2281701410,276,1107296274,277,12585472,278,2281701444,279,570425378,280,6296576,281,1140850756,282,553648162,283,3680256,284,1140850824,285,285212708,286,1830912,287,1140850832,288,150995012,289,245760,290,570425616,291,142606404,293,570425632,294,75497540,296,570425888,297,71303304,299,301990464,300,37748872,302,285213760,303,37748872,305,285213760,306,35651856,308,150997120,309,18874640,311,142608512,312,17826320,314,142610688,315,9437728,317,71307520,318,9437728,320,71307776,321,4719648,323,37757440,324,4719680,326,35660800,327,2361408,329,35668992,330,1312896,332,18909184,333,1183872,335,17860608,336,663808,338,8982528,339,336128,341,4857856,342,180736,344,3162112,345,33280,347,622592,348,17408,351,14336,504,16777216,506,256]},{"c":0,"p":[1,16776960,4,16776960,7,16776960,10,16776960,13,24576,16,36864,19,71680,22,134144,25,264704,28,525568,31,263424,34,132608,37,66048,40,34304,43,17920,46,8704,49,5376,52,5312,55,2080,58,3088,61,3088,64,3088,67,3104,70,4640,73,4640,76,8736,79,16912,82,99344,85,132104,88,263176,91,263172,94,263170,96,2147483648,97,526337,99,1073741824,100,526336,102,536870912,103,526336,105,536870912,106,526336,108,536870912,109,526336,111,536870912,112,263168,114,536870912,115,263168,117,536870912,118,263168,120,402653184,121,525312,123,67108864,124,1049600,126,33554432,127,6292480,129,25165824,130,8389632,132,4194304,133,16778240,135,4194304,136,8389120,138,4194304,139,4194816,141,2097152,142,3145984,144,2097152,145,524544,147,2097152,148,262272,150,1048576,151,524352,153,524288,154,1048640,156,393216,157,2097184,159,65536,160,4194336,162,32768,163,8388624,165,16384,166,4194320,168,8192,169,4194312,171,4096,172,2097160,174,2048,175,2097156,177,1024,178,1048580,181,16776960,184,16776960,187,16776960,190,16776960,205,8192,208,4096,211,4096,214,2048,217,2048,220,1024,223,1024,226,1024,229,512,232,512,235,512,238,512,239,2147483648,241,1024,242,2147483648,244,1024,245,1073741824,247,2048,248,1073741824,250,2048,251,1073741824,253,2049,254,536870912,255,3221225472,256,1030,257,536870912,258,536870912,259,1048,260,536870912,261,268435456,262,544,263,268435456,264,268435456,265,939524672,266,268435456,267,134217728,268,3321889344,269,268435456,270,67108865,271,16777856,272,134217729,273,67108865,274,8389888,275,134217730,276,33554434,277,4195840,278,134217732,279,33554434,280,2097152,281,67108868,282,16777218,283,1575936,284,67108872,285,16777220,286,406528,287,67108880,288,16777220,289,116736,290,33554448,291,8388612,292,2048,293,33554464,294,8388612,295,2048,296,33554464,297,4194312,298,2048,299,33554496,300,4194312,301,2048,302,16777280,303,4194312,304,1024,305,16777280,306,2097168,307,1024,308,16777344,309,2097168,310,1024,311,8388736,312,1048592,313,1024,314,8388864,315,1048608,316,1024,317,4194560,318,1048608,319,1024,320,4194816,321,524320,322,1024,323,4194816,324,524352,325,1024,326,2098176,327,262208,328,512,329,2098176,330,262272,331,512,332,2099200,333,131200,334,256,335,1050624,336,131328,337,256,338,528384,339,65792,340,128,341,532480,342,66048,343,64,344,409600,345,33280,346,64,347,98304,348,17408,349,32,351,14336,352,32,355,16,358,16,361,8,364,8,367,4,370,4,397,24576,400,36864,403,71680,406,134144,408,16777472,409,17042176,410,16777472,412,525568,415,263424,418,132608,421,66048,424,34304,427,17920,430,8704,433,5376,436,5312,439,2080,442,3088,445,3088,448,3088,451,3104,454,4640,456,16777472,457,16782112,458,16777472,460,8736,463,16912,466,99344,469,132104,472,263176,475,263172,478,263170,480,2147483648,481,526337,483,1073741824,484,526336,486,536870912,487,526336,489,536870912,490,526336,492,536870912,493,526336,495,536870912,496,263168,498,536870912,499,263168,501,536870912,502,263168,504,419430656,505,17302784,506,16777216,507,67108864,508,1049600,510,33554432,511,6292480,513,25165824,514,8389632,516,4194304,517,16778240,519,4194304,520,8389120,522,4194304,523,4194816,525,2097152,526,3145984,528,2097152,529,524544,531,2097152,532,262272,534,1048576,535,524352,537,524288,538,1048640,540,393216,541,2097184,543,65536,544,4194336,546,32768,547,8388624,549,16384,550,4194320,552,16785664,553,20971784,554,16777472,555,4096,556,2097160,558,2048,559,2097156,561,1024,562,1048580]},{"c":0,"p":[]},{"c":0,"p":[13,30720,16,40960,19,92160,22,257024,25,436736,28,861440,31,435456,34,222720,37,111104,40,56832,43,29184,46,28672,49,29696,52,46528,55,51360,58,85072,61,52272,64,27648,67,15404,70,2594,73,1569,75,2147483648,76,12320,78,1073741824,79,25360,81,1073741824,82,107792,84,536870912,85,148616,87,268435456,88,279624,90,268435456,91,279940,93,268435456,94,280066,96,2281701376,97,543745,99,1207959552,100,544768,102,671088640,103,550912,105,805306368,106,546816,109,540672,111,3758096384,112,297984,114,536870912,115,294913,117,536870912,118,296450,120,402653184,121,591362,123,67108864,124,1114113,126,33554432,127,6422529,129,2172649472,130,8522752,132,2151677952,133,17042432,135,1077936128,136,8653312,138,541065216,139,4459008,141,270532608,142,3410176,144,136314880,145,788736,147,69206016,148,2176,150,34603008,151,788544,153,17301504,154,1181760,156,17170432,157,2229280,159,8454144,160,4260896,162,4227072,163,8455184,165,25182208,166,4228112,168,33562624,169,4228104,171,67112960,172,2114568,174,402655232,175,2114564,177,536871936,178,1057796,205,12288,214,10240,217,10240,220,9216,223,9216,226,9216,229,4608,232,4608,235,4608,238,4608,241,9216,244,9216,247,18432,250,18432,253,18432,256,9216,259,9216,262,4608,265,4608,268,4608,271,8704,274,9216,277,17408,280,17408,283,17408,286,17408,289,18432,292,18432,295,18432,298,18432,301,18432,304,33792,307,33792,310,33792,313,66560,316,66560,319,132096,322,132096,325,263168,328,262656,331,262656,334,262400,337,262400,340,262272,343,262208,346,131136,349,131104,352,65568,355,65552,358,32784,361,32776,364,16392,367,16388,370,8196,397,30720,400,40960,403,92160,406,257024,409,436736,412,861440,415,435456,418,222720,421,111104,424,56832,427,29184,430,28672,433,29696,436,46528,439,51360,442,85072,445,52272,448,27648,451,15404,454,2594,457,1569,459,2147483648,460,12320,462,1073741824,463,25360,465,1073741824,466,107792,468,536870912,469,148616,471,268435456,472,279624,474,268435456,475,279940,477,268435456,478,280066,480,2281701376,481,543745,483,1207959552,484,544768,486,671088640,487,550912,489,805306368,490,546816,493,540672,495,3758096384,496,297984,498,536870912,499,294913,501,536870912,502,296450,504,402653184,505,591362,507,67108864,508,1114113,510,33554432,511,6422529,513,2172649472,514,8522752,516,2151677952,517,17042432,519,1077936128,520,8653312,522,541065216,523,4459008,525,270532608,526,3410176,528,136314880,529,788736,531,69206016,532,2176,534,34603008,535,788544,537,17301504,538,1181760,540,17170432,541,2229280,543,8454144,544,4260896,546,4227072,547,8455184,549,25182208,550,4228112,552,33562624,553,4228104,555,67112960,556,2114568,558,402655232,559,2114564,561,536871936,562,1057796]},{"c":0,"p":[]},{"c":1,"p":[1,16776960,4,16776960,7,16776960,10,16776960,13,303104,16,303104,19,282624,22,282624,25,272384,28,272384,31,530432,34,526336,37,1053696,40,1053184,43,2101504,46,1053184,49,533504,52,272384,55,151552,58,90112,61,55296,64,17408,67,16896,70,24960,73,20544,76,10304,79,9280,82,4672,85,4416,88,2240,91,2176,94,1408,97,1664,100,2688,103,4736,106,2816,109,1792,112,3840,115,4224,118,8384,121,8384,124,8256,127,16576,130,16544,133,16544,136,32960,139,65856,142,65920,145,131712,148,262912,151,262528,154,131264,157,131168,160,65624,163,65572,166,131140,169,262210,172,262274,175,524417,178,1048833,181,16776960,184,16776960,187,16776960,190,16776960,205,8192,208,8192,211,4096,214,4096,217,2048,220,2048,223,2048,226,2048,229,4096,232,4096,235,4096,238,4096,241,8192,244,8192,247,16384,250,16384,253,16384,256,16384,259,16384,262,16384,265,16384,268,8192,271,8192,274,4096,277,4096,280,2048,283,2048,286,1024,289,1024,292,512,295,512,298,512,301,256,304,256,307,128,310,128,313,128,316,64,319,64,322,32,325,32,328,64,331,64,334,128,337,128,340,256,343,128,346,128,349,64,352,64,355,32,358,64,361,64,364,128,367,128,370,256,397,303104,400,303104,403,282624,406,282624,409,272384,412,272384,415,530432,418,526336,421,1053696,424,1053184,427,2101504,430,1053184,433,533504,436,272384,439,151552,442,90112,445,55296,448,17408,451,16896,454,24960,457,20544,460,10304,463,9280,466,4672,469,4416,472,2240,475,2176,478,1408,481,1664,484,2688,487,4736,490,2816,493,1792,496,3840,499,4224,502,8384,505,8384,508,8256,511,16576,514,16544,517,16544,520,32960,523,65856,526,65920,529,131712,532,262912,535,262528,538,131264,541,131168,544,65624,547,65572,550,131140,553,262210,556,262274,559,524417,562,1048833]},{"c":0,"p":[]},{"c":0,"p":[13,5087232,16,3514368,19,1396736,22,2707456,25,2566144,28,4532224,31,4921344,34,5048320,37,10097664,40,8524288,43,8524032,46,7410176,49,4760576,52,6580224,55,10645504,58,9531392,61,8976384,64,4457472,67,4506112,70,2318720,73,2314304,76,1386560,79,1614912,82,561728,85,1593664,88,2377920,91,4491392,94,4752768,97,8980096,100,9505408,103,17961600,106,9571072,109,5310208,112,3215104,115,1085568,118,1614016,121,1614016,124,2662464,127,2670784,130,4767904,133,4767904,136,8913088,139,8651072,142,17039744,145,16777856,148,33948416,151,17236352,154,8421568,157,6520928,160,1065048,163,532516,166,1294404,169,2424898,172,2556034,175,4522113,178,8454401,205,532480,208,1056768,211,1052672,214,2101248,217,2099200,220,4196352,223,4196352,226,4196352,229,8392704,232,8392704,235,8392704,238,4198400,241,4202496,244,2105344,247,2113536,250,1064960,253,540672,256,278528,259,278528,262,147456,265,81920,268,73728,271,40960,274,36864,277,20480,280,18432,283,34816,286,33792,289,66560,292,66048,295,131584,298,131584,301,65792,304,65792,307,32896,310,32896,313,32896,316,32832,319,32832,322,32800,325,32800,328,32832,331,65600,334,65664,337,131200,340,131328,343,131200,346,131200,349,65600,352,65600,355,65568,358,65600,361,65600,364,65664,367,65664,370,65792,397,5087232,400,3514368,403,1396736,406,2707456,409,2566144,412,4532224,415,4921344,418,5048320,421,10097664,424,8524288,427,8524032,430,7410176,433,4760576,436,6580224,439,10645504,442,9531392,445,8976384,448,4457472,451,4506112,454,2318720,457,2314304,460,1386560,463,1614912,466,561728,469,1593664,472,2377920,475,4491392,478,4752768,481,8980096,484,9505408,487,17961600,490,9571072,493,5310208,496,3215104,499,1085568,502,1614016,505,1614016,508,2662464,511,2670784,514,4767904,517,4767904,520,8913088,523,8651072,526,17039744,529,16777856,532,33948416,535,17236352,538,8421568,541,6520928,544,1065048,547,532516,550,1294404,553,2424898,556,2556034,559,4522113,562,8454401]},{"c":0,"p":[]},{"c":0,"p":[13,4826112,16,3254272,19,1159168,22,2887680,25,2240512,28,4214784,31,4294656,34,4293632,37,9634816,40,11731456,43,14680320,46,2130176,49,49408,52,4219136,55,8403200,58,11539712,61,11024640,64,6578432,67,6603008,70,164096,73,65792,76,3735808,79,2654720,82,6849024,85,14173184,88,23348224,91,23364608,94,39355392,97,43582464,100,77136896,103,85328896,106,76940288,109,72680448,112,137693184,115,135563264,118,136087552,121,68978688,124,35686400,127,35686400,130,22579200,133,14190592,136,15239168,139,13961216,142,21827584,145,25432064,148,50532352,151,25300992,154,12816384,157,5279744,160,1593344,163,798720,166,1396736,169,2312192,172,2177024,175,4983808,178,9438208,205,532480,208,1056768,211,1056768,214,2101248,217,2101248,220,4198400,223,4196352,226,4195328,229,8389632,232,8389120,235,8388864,238,4194560,241,4194560,244,2097408,247,2097408,250,1048832,253,524544,256,262400,259,262400,262,131328,265,65792,268,65792,271,33280,274,33280,277,17408,280,17408,283,33792,286,33792,289,66560,292,66560,295,132096,298,132096,301,66560,304,67584,307,34816,310,34816,313,34816,316,34816,319,34816,322,34816,325,34816,328,34816,331,67584,334,69632,337,135168,340,135168,343,135168,346,135168,349,69632,352,69632,355,69632,358,69632,361,67584,364,67584,367,66560,370,66560,397,4826112,400,3254272,403,1159168,406,2887680,409,2240512,412,4214784,415,4294656,418,4293632,421,9634816,424,11731456,427,14680320,430,2130176,433,49408,436,4219136,439,8403200,442,11539712,445,11024640,448,6578432,451,6603008,454,164096,457,65792,460,3735808,463,2654720,466,6849024,469,14173184,472,23348224,475,23364608,478,39355392,481,43582464,484,77136896,487,85328896,490,76940288,493,72680448,496,137693184,499,135563264,502,136087552,505,68978688,508,35686400,511,35686400,514,22579200,517,14190592,520,15239168,523,13961216,526,21827584,529,25432064,532,50532352,535,25300992,538,12816384,541,5279744,544,1593344,547,798720,550,1396736,553,2312192,556,2177024,559,4983808,562,9438208]},{"c":0,"p":[]},{"c":0,"p":[1,16776960,4,16776960,7,16776960,10,16776960,13,41984,16,43008,19,45056,22,69632,25,77824,28,86016,31,165888,34,295936,37,1639424,40,2163200,43,4325632,46,4292864,49,4210944,52,2105600,55,2103552,58,2098432,61,2103552,64,2105600,67,2113792,70,2195712,73,2228480,76,2883840,79,3146240,82,6558208,85,12856320,88,21124096,91,18915328,94,36699136,97,34833408,100,67863552,103,67486720,106,67482624,109,67470336,112,134547456,115,134481920,118,134481920,121,67373056,124,34080768,127,34080768,130,17827840,133,9439232,136,6293504,139,5244928,142,4722688,145,8785920,148,16846848,151,8458240,154,4263936,157,3215360,160,593920,163,331776,166,299008,169,149504,172,145408,175,68608,178,66560,181,16776960,184,16776960,187,16776960,190,16776960,205,8192,208,8192,211,8192,214,4096,217,4096,220,4096,223,2048,226,1024,229,1024,232,512,235,256,238,256,241,256,244,256,247,256,250,256,253,256,256,256,259,256,262,256,265,256,268,256,271,66048,274,66048,277,70656,280,66560,283,65536,286,4193280,289,4162560,292,230400,295,115712,298,111616,301,99328,304,67584,307,2048,310,2048,313,2048,316,2048,319,2048,322,2048,325,2048,328,2048,331,2048,334,4096,337,4096,340,4096,343,4096,346,4096,349,4096,352,4096,355,4096,358,4096,361,2048,364,2048,367,1024,370,1024,397,41984,400,43008,403,45056,406,69632,409,77824,412,86016,415,165888,418,295936,421,1639424,424,2163200,427,4325632,430,4292864,433,4210944,436,2105600,439,2103552,442,2098432,445,2103552,448,2105600,451,2113792,454,2195712,457,2228480,460,2883840,463,3146240,466,6291968,469,12583936,472,20972544,475,18875392,478,34833408,481,34833408,484,67863552,487,67372032,490,67372032,493,67372032,496,134481920,499,134481920,502,134481920,505,67373056,508,34080768,511,34080768,514,17827840,517,9439232,520,6293504,523,5244928,526,4722688,529,8785920,532,16846848,535,8458240,538,4263936,541,3215360,544,593920,547,331776,550,299008,553,149504,556,145408,559,68608,562,66560]},{"c":0,"p":[64,4194816,67,2098304,70,1049856,73,1050112,76,527584,79,526592,82,512,85,24,88,96,91,896,94,532676608,109,2048,112,1024,115,66048,118,65920,121,65600,124,65536,127,65536,130,65536,133,65536,250,131072,253,131072,256,131584,259,66560,262,66624,265,66688,268,67840,271,512,274,3072,277,24,280,96,283,896,286,532676608,292,29360128,295,100663296,298,402653184,301,2048,304,1024,307,66048,310,65920,313,65600,316,65536,319,65536,322,65536,325,65536]},{"c":0,"p":[46,128,49,33554560,52,16777472,55,8388864,58,8389128,61,8389168,64,64,70,3,73,28,78,3221225472,82,3,85,4,94,3758096384,95,7,124,32,127,16,130,8,133,4,136,196608,139,196608,142,196608,145,196608,148,327680,151,65536,232,262144,235,262144,238,131200,241,131200,244,131328,247,131328,250,512,253,512,256,6,259,24,262,32,270,3221225472,274,3,277,4,286,3758096384,287,7,298,536870912,301,3221225472,305,3,316,32,319,16,322,8,325,4,328,196608,331,196608,334,196608,337,196608,340,327680,343,65536]},{"c":0,"p":[25,64,28,64,31,268435584,34,134217856,37,134217856,40,67108992,43,67108992,46,33554432,48,268435456,51,3758096384,55,7,66,117440512,69,4261412864,72,134217728,75,805306368,92,1008,95,8,136,2,138,2147483648,139,1,141,1073741824,144,536870912,151,262144,154,327680,157,589824,160,589824,163,1114112,166,1114112,169,1114112,172,65536,214,524288,217,524352,220,262208,223,262272,226,262272,229,262272,232,128,235,128,249,1006632960,252,3221225472,253,1,258,16777216,261,100663296,264,134217728,267,805306368,284,1008,287,8,308,4,311,24,314,32,317,64,328,2,330,2147483648,331,1,333,1073741824,336,536870912,343,262144,346,327680,349,589824,352,589824,355,1114112,358,1114112,361,1114112,364,65536]},{"c":1,"p":[4,128,7,128,10,2147483776,13,2147483776,16,2147483776,19,1073741888,22,536870976,25,536870976,28,536870976,31,268435584,34,134217856,37,134217856,40,67108992,43,67108992,45,14680064,46,33554560,48,520093696,49,33554560,51,3758096384,52,16777472,54,524288,55,8388871,57,1048576,58,8389128,60,2097152,61,8389168,63,4194304,64,4194880,66,125829120,67,2098304,69,4294705152,70,1049859,72,134217728,73,1050140,75,805306368,76,527584,78,3221225472,79,526592,82,266755,85,272412,88,151648,89,98304,91,42880,92,32752,94,4294965248,95,15,97,229376,100,229376,103,114688,106,110592,109,100352,112,66560,115,66048,118,65920,121,65600,124,65568,127,65552,130,65544,133,65540,136,196610,138,2147483648,139,196609,141,1073741824,142,196608,144,536870912,145,196608,147,402653184,148,327680,150,100663296,151,327680,153,16777216,154,327680,156,8388608,157,589824,160,589824,163,1114112,166,1114112,169,1114112,172,2162688,175,4259840,178,4259840,181,4259840,184,8454144,187,16842752,190,65536,193,2097152,196,1048704,199,1048704,202,1048704,205,1048704,208,524416,211,524352,214,524352,217,524352,220,262208,223,262272,226,262272,229,262272,232,262272,235,262272,238,131200,241,131200,244,131328,246,66584576,247,131328,249,1007681536,250,131584,252,3223322624,253,131585,255,4194304,256,131590,258,25165824,259,66584,261,100663296,262,66656,264,134217728,265,66688,267,805306368,268,67840,270,3221225472,271,66048,274,68611,277,69660,280,65632,281,98304,283,67456,284,32752,286,4294965248,287,15,289,4161536,292,29589504,295,100777984,298,939634688,301,3221325824,304,66560,305,3,307,66048,308,4,310,65920,311,24,313,65600,314,32,316,65568,317,64,319,65552,320,128,322,65544,323,256,325,65540,326,512,328,196610,329,1024,330,2147483648,331,196609,332,2048,333,1073741824,334,196608,336,536870912,337,196608,339,402653184,340,327680,342,100663296,343,327680,345,16777216,346,327680,348,8388608,349,589824,352,589824,355,1114112,358,1114112,361,1114112,364,2162688,367,4259840,370,4259840,373,4259840,376,8454144,379,16842752,382,65536,478,229376,481,229376,484,229376]},{"c":0,"p":[1,128,2,6,5,2,8,1,42,32768,45,2031616,48,131072,51,262144,72,229376,75,28672,89,4063232,159,4194304,162,3670016,165,262144,190,16777216,193,128,234,32768,240,131072,243,262144,246,507904,281,4063232,335,4096,338,8192,341,16384,344,16384,347,32768,351,4194304,354,3670016,357,262144,382,16777216]},{"c":0,"p":[27,1024,30,2048,33,4096,36,8192,39,16384,48,61440,51,3584,78,3072,81,512,84,448,86,503316480,89,29360128,168,196608,171,49152,174,12288,219,1024,222,2048,225,4096,228,8192,231,16384,246,15360,249,896,278,503316480,281,29360128,350,32768,353,65536,356,131072,359,131072,360,196608,362,131072,363,49152,365,262144,366,12288]},{"c":0,"p":[12,128,15,256,18,256,21,256,24,512,54,448,57,48,86,3758096384,87,32,90,16,93,8,96,4,177,2048,180,1792,183,128,204,128,207,256,210,256,213,256,216,512,249,64,252,56,255,4,278,3758096384,368,262144,369,2048,371,524288,372,1792,374,524288,375,128,377,524288,380,1048576]},{"c":0,"p":[0,16,3,32,6,64,9,64,60,8,63,6,66,1,69,1,99,2,102,1,105,1,108,1,183,64,186,48,189,12,192,16,195,32,198,64,201,64,252,8,255,5,375,64,378,48,381,12,383,1048576]},{"c":0,"p":[]},{"c":0,"p":[0,16,1,128,2,6,3,32,4,128,5,2,6,64,7,128,8,1,9,64,10,2147483776,12,128,13,2147483776,15,256,16,2147483776,18,256,19,1073741888,21,256,22,536870976,24,512,25,536870976,27,1024,28,536870976,30,2048,31,268435584,33,4096,34,134217856,36,8192,37,134217856,39,16384,40,67108992,42,32768,43,67108992,45,16711680,46,33554560,48,520286208,49,33554560,51,3758362112,52,16777472,54,524736,55,8388871,57,1048624,58,8389128,60,2097160,61,8389168,63,4194310,64,4194880,66,125829121,67,2098304,69,4294705153,70,1049859,72,134447104,73,1050140,75,805335040,76,527584,78,3221228544,79,526592,81,512,82,266755,84,448,85,272412,86,4261412864,87,32,88,151648,89,33521664,90,16,91,42880,92,32752,93,8,94,4026533872,95,15,96,4,97,229376,99,2,100,229376,102,1,103,114688,105,1,106,110592,108,1,109,100352,112,66560,115,66048,118,65920,121,65600,124,65568,127,65552,130,65544,133,65540,136,196610,138,2147483648,139,196609,141,1073741824,142,196608,144,536870912,145,196608,147,402653184,148,327680,150,100663296,151,327680,153,16777216,154,327680,156,8388608,157,589824,159,4194304,160,589824,162,3670016,163,1114112,165,262144,166,1114112,168,196608,169,1114112,171,49152,172,2162688,174,12288,175,4259840,177,2048,178,4259840,180,1792,181,4259840,183,192,184,8454144,186,48,187,16842752,189,12,190,16842752,192,16,193,2097280,195,32,196,1048704,198,64,199,1048704,201,64,202,1048704,204,128,205,1048704,207,256,208,524416,210,256,211,524352,213,256,214,524352,216,512,217,524352,219,1024,220,262208,222,2048,223,262272,225,4096,226,262272,228,8192,229,262272,231,16384,232,262272,234,32768,235,262272,238,131200,240,131072,241,131200,243,262144,244,131328,246,67107840,247,131328,249,1007682496,250,131584,252,3223322672,253,131585,255,4194305,256,131590,258,25165824,259,66584,261,100663296,262,66656,264,134217728,265,66688,267,805306368,268,67840,270,3221225472,271,66048,274,68611,277,69660,278,4261412864,280,65632,281,33521664,283,67456,284,32752,286,4026533872,287,15,289,4161536,292,29589504,295,100777984,298,939634688,301,3221325824,304,66560,305,3,307,66048,308,4,310,65920,311,24,313,65600,314,32,316,65568,317,64,319,65552,320,128,322,65544,323,256,325,65540,326,512,328,196610,329,1024,330,2147483648,331,196609,332,2048,333,1073741824,334,196608,335,4096,336,536870912,337,196608,338,8192,339,402653184,340,327680,341,16384,342,100663296,343,327680,344,16384,345,16777216,346,327680,347,32768,348,8388608,349,589824,350,32768,351,4194304,352,589824,353,65536,354,3670016,355,1114112,356,131072,357,262144,358,1114112,359,131072,360,196608,361,1114112,362,131072,363,49152,364,2162688,365,262144,366,12288,367,4259840,368,262144,369,2048,370,4259840,371,524288,372,1792,373,4259840,374,524288,375,192,376,8454144,377,524288,378,48,379,16842752,380,1048576,381,12,382,16842752,383,1048576,478,268206064,481,229376,484,229376]},{"c":0,"p":[93,4278190080,94,4026531855,95,255,285,4278190080,286,4026531855,287,255,477,4278190080,478,4026531855,479,255]},{"c":0,"p":[93,16773120,95,1048320,285,16773120,287,1048320,477,16773120,479,1048320]},{"c":0,"p":[93,4095,95,4293918720,285,4095,287,4293918720,477,4095,479,4293918720]},{"c":1,"p":[276,1072693248,278,4092,279,2147942400,280,3221225475,281,57345,292,4290774015,295,536870904,298,16776960,468,1072693248,470,4092,471,2147942400,472,3221225475,473,57345,484,4290774015,487,536870904,490,16776960]},{"c":0,"p":[270,4294705152,272,16383,273,3759079424,274,3221225475,275,61447,276,1072758784,277,3221225475,278,36860,279,2147942400,280,3221225475,281,57345,292,4290774015,295,536870904,298,4278190335,301,536870904,304,268435440,307,67108800,310,8388096,462,4294705152,464,16383,465,3759079424,466,3221225475,467,61447,468,1072758784,469,3221225475,470,36860,471,2147942400,472,3221225475,473,57345,484,4290774015,487,536870904,490,4278190335,493,536870904,496,268435440,499,67108800,502,8388096]},{"c":0,"p":[261,2146959360,263,8190,264,4294836224,265,2147483649,266,32767,267,3759079424,268,3221225475,269,61447,270,4294901760,271,3221225475,272,65535,273,3759013888,274,2147483649,275,28679,276,65536,277,3221225475,278,32768,298,4294967295,301,536870904,304,4030725135,307,2080374846,310,528482808,313,536870904,316,268435440,319,67108800,322,16776960,325,2095104,453,2146959360,455,8190,456,4294836224,457,2147483649,458,32767,459,3759079424,460,3221225475,461,61447,462,4294901760,463,3221225475,464,65535,465,3759013888,466,2147483649,467,28679,468,65536,469,3221225475,470,32768,490,4294967295,493,536870904,496,4030725135,499,2080374846,502,528482808,505,536870904,508,268435440,511,67108800,514,16776960,517,2095104]},{"c":0,"p":[249,1072693248,251,4092,252,2146959360,254,8190,255,4294836224,256,2147483649,257,32767,258,4294901760,259,2147483649,260,65535,261,4294901760,262,3221225475,263,65535,264,4294770688,265,1073741826,266,49151,267,3759013888,268,2147483649,269,28679,270,131072,271,2147483649,272,16384,273,65536,274,1073741826,275,32768,304,4290774015,307,134217696,310,3762289671,313,1610612742,316,805306380,319,469762104,322,520093944,325,266340336,328,134217696,331,33554304,334,16776960,337,2095104,441,1072693248,443,4092,444,2146959360,446,8190,447,4294836224,448,2147483649,449,32767,450,4294901760,451,2147483649,452,65535,453,4294901760,454,3221225475,455,65535,456,4294770688,457,1073741826,458,49151,459,3759013888,460,2147483649,461,28679,462,131072,463,2147483649,464,16384,465,65536,466,1073741826,467,32768,496,4290774015,499,134217696,502,3762289671,505,1610612742,508,805306380,511,469762104,514,520093944,517,266340336,520,134217696,523,33554304,526,16776960,529,2095104]},{"c":0,"p":[243,2146959360,245,8190,246,4294705152,248,16383,249,3222142976,250,2147483649,251,28675,252,2147942400,253,2147483649,254,57345,255,535887872,256,1073741826,257,36856,258,4294705152,259,1073741826,260,16383,261,2147876864,263,24577,264,131072,265,2147483649,266,16384,270,65536,271,1073741826,272,32768,307,2013265950,310,4290774015,313,134217696,316,3221225475,319,1610612742,322,536870916,325,268435464,328,402653208,331,234881136,334,251658480,337,132122592,340,67108800,343,33554304,346,8388096,349,2095104,435,2146959360,437,8190,438,4294705152,440,16383,441,3222142976,442,2147483649,443,28675,444,2147942400,445,2147483649,446,57345,447,535887872,448,1073741826,449,36856,450,4294705152,451,1073741826,452,16383,453,2147876864,455,24577,456,131072,457,2147483649,458,16384,462,65536,463,1073741826,464,32768,499,2013265950,502,4290774015,505,134217696,508,3221225475,511,1610612742,514,536870916,517,268435464,520,402653208,523,234881136,526,251658480,529,132122592,532,67108800,535,33554304,538,8388096,541,2095104]},{"c":0,"p":[234,1072693248,236,4092,237,2146959360,239,8190,240,4294705152,242,16383,243,2147876864,244,2147483649,245,24577,246,196608,247,2147483649,248,49152,249,535887872,250,1073741826,251,36856,252,2146959360,253,1073741826,254,8190,255,3758882816,257,12295,258,131072,260,16384,262,2147483649,267,65536,268,1073741826,269,32768,313,2013265950,316,4294967295,319,134217696,322,3225418755,325,3758096391,328,1610612742,331,805306380,334,268435464,337,402653208,340,469762104,343,234881136,346,260047344,349,132122592,352,67108800,355,33554304,358,16776960,361,8388096,364,2095104,426,1072693248,428,4092,429,2146959360,431,8190,432,4294705152,434,16383,435,2147876864,436,2147483649,437,24577,438,196608,439,2147483649,440,49152,441,535887872,442,1073741826,443,36856,444,2146959360,445,1073741826,446,8190,447,3758882816,449,12295,450,131072,452,16384,454,2147483649,459,65536,460,1073741826,461,32768,505,2013265950,508,4294967295,511,134217696,514,3225418755,517,3758096391,520,1610612742,523,805306380,526,268435464,529,402653208,532,469762104,535,234881136,538,260047344,541,132122592,544,67108800,547,33554304,550,16776960,553,8388096,556,2095104]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":1,"p":[234,1072693248,236,4092,237,2146959360,239,8190,240,4294705152,242,16383,243,4294836224,244,2147483649,245,32767,246,4294901760,247,2147483649,248,65535,249,3759079424,250,3221225475,251,61447,252,2147942400,253,3221225475,254,57345,255,196608,256,3221225475,257,49152,258,65536,259,3221225475,260,32768,261,65536,262,1073741826,263,32768,264,65536,265,1073741826,266,32768,319,2013265950,322,4290774015,325,4294967295,328,2147483646,331,1073741820,334,536870904,337,536870904,340,536870904,343,268435440,346,268435440,349,134217696,352,67108800,355,33554304,358,16776960,361,8388096,364,2095104,426,1072693248,428,4092,429,2146959360,431,8190,432,4294705152,434,16383,435,4294836224,436,2147483649,437,32767,438,4294901760,439,2147483649,440,65535,441,3759079424,442,3221225475,443,61447,444,2147942400,445,3221225475,446,57345,447,196608,448,3221225475,449,49152,450,65536,451,3221225475,452,32768,453,65536,454,1073741826,455,32768,456,65536,457,1073741826,458,32768,511,2013265950,514,4290774015,517,4294967295,520,2147483646,523,1073741820,526,536870904,529,536870904,532,536870904,535,268435440,538,268435440,541,134217696,544,67108800,547,33554304,550,16776960,553,8388096,556,2095104]},{"c":0,"p":[]},{"c":0,"p":[171,16777215,172,4294901760,173,255,174,16777215,175,4294901760,176,255,177,16777215,178,4294901760,179,255,180,16777215,181,4294901760,182,255,183,16777215,184,4294901760,185,255,186,16777215,187,4294901760,188,255,189,16777215,190,4294901760,191,255,363,4294967295,364,2033663,366,4294967295,367,65535,369,4294967295,370,65535,372,4294967295,373,65535,375,4294967295,376,65535,378,4294967295,379,65535,381,4294967295,382,65535,555,4278194175,556,266401807,557,1048320,558,4278194175,559,268369935,560,1048320,561,4278194175,562,268369935,563,1048320,564,4278194175,565,268369935,566,1048320,567,4278194175,568,268369935,569,1048320,570,4278194175,571,268369935,572,1048320,573,4278194175,574,268369935,575,1048320]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":1,"p":[171,16777215,172,4294901760,173,255,174,16777215,175,4294901760,176,255,177,16777215,178,4294901760,179,255,180,16777215,181,4294901760,182,255,183,16777215,184,4294901760,185,255,186,16777215,187,4294901760,188,255,189,16777215,190,4294901760,191,255,234,1072693248,236,4092,237,2146959360,239,8190,240,4294705152,242,16383,243,4294836224,244,2147483649,245,32767,246,4294901760,247,2147483649,248,65535,249,3759079424,250,3221225475,251,61447,252,2147942400,253,3221225475,254,57345,255,196608,256,3221225475,257,49152,258,65536,259,3221225475,260,32768,261,65536,262,1073741826,263,32768,264,65536,265,1073741826,266,32768,319,2013265950,322,4290774015,325,4294967295,328,2147483646,331,1073741820,334,536870904,337,536870904,340,536870904,343,268435440,346,268435440,349,134217696,352,67108800,355,33554304,358,16776960,361,8388096,363,4294967295,364,65535,366,4294967295,367,65535,369,4294967295,370,65535,372,4294967295,373,65535,375,4294967295,376,65535,378,4294967295,379,65535,381,4294967295,382,65535,426,1072693248,428,4092,429,2146959360,431,8190,432,4294705152,434,16383,435,4294836224,436,2147483649,437,32767,438,4294901760,439,2147483649,440,65535,441,3759079424,442,3221225475,443,61447,444,2147942400,445,3221225475,446,57345,447,196608,448,3221225475,449,49152,450,65536,451,3221225475,452,32768,453,65536,454,1073741826,455,32768,456,65536,457,1073741826,458,32768,511,2013265950,514,4290774015,517,4294967295,520,2147483646,523,1073741820,526,536870904,529,536870904,532,536870904,535,268435440,538,268435440,541,134217696,544,67108800,547,33554304,550,16776960,553,8388096,555,4278194175,556,268369935,557,1048320,558,4278194175,559,268369935,560,1048320,561,4278194175,562,268369935,563,1048320,564,4278194175,565,268369935,566,1048320,567,4278194175,568,268369935,569,1048320,570,4278194175,571,268369935,572,1048320,573,4278194175,574,268369935,575,1048320]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]},{"c":0,"p":[]}],"test":false}};
+
+</script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const hex = (v, n = 8) => '0x' + (v >>> 0).toString(16).padStart(n, '0');
+
+  const VAR = {
+    multiplier: { name: 'Multiplier (cfu_mul.v)', short: 'multiplier', w4: 'fn0 on (6, 7) → 6 × 7', note: 'Multiplier in the slot' },
+    bitwise:    { name: 'Bitwise unit (cfu_bitwise.v)', short: 'bitwise unit', w4: 'fn0 on (6, 7) → popcount(6)', note: 'Bitwise unit in the slot' },
+  };
+  const other = (v) => (v === 'multiplier' ? 'bitwise' : 'multiplier');
+  const DMEM_NOTES = ['x1 + x2', 'x2 − x1', '', '', 'fn0 (6, 7)', 'fn1 (6, 7)', 'fn2 (6, 7)', 'fn3 (6, 7)', 'fn0 (2¹⁶, 2¹⁶)', 'fn1 (2¹⁶, 2¹⁶)', 'fn2 (2¹⁶, 2¹⁶)'];
+  const REG_NOTES = { 1: '6', 2: '7', 3: 'sum', 4: 'diff', 5: 'CFU base', 7: 'big operand', 8: 'fn', 9: 'CFU result' };
+  const REGS = [1, 2, 3, 4, 5, 7, 8, 9];
+
+  let build = 'b2';
+  const core = new RV.Core('bitwise', build);
+  let running = null, busy = false, live = null;
+
+  // ---------- listing / tables ----------
+  const listing = $('listing');
+  function buildListing() {
+    listing.innerHTML = '';
+    RV.BUILDS[build].program.forEach(([w, asm], i) => {
+      const li = document.createElement('li');
+      if (/\(x5\)/.test(asm)) li.className = 'cfu';
+      if (asm === 'nop') { li.className = 'nop'; li.title = 'Added for the registered CFU: result_q needs one clock to settle'; }
+      li.innerHTML = `<span class="a">${(i * 4).toString(16).padStart(3, '0')}</span><span class="h">${hex(w).slice(2)}</span><span class="s"></span>`;
+      li.querySelector('.s').textContent = asm;
+      listing.appendChild(li);
+    });
+  }
+  buildListing();
+  $('regs').innerHTML = REGS.map((r) => `<tr><th>x${r}</th><td class="num" id="x${r}">0</td><td class="note">${REG_NOTES[r]}</td></tr>`).join('');
+  $('dmem').innerHTML = DMEM_NOTES.map((n, i) => `<tr class="${i >= 4 ? 'cfuw' : ''} ${n ? '' : 'dim'}"><th>[${i}]</th><td class="num" id="m${i}">0</td><td class="note">${n || 'unused'}</td></tr>`).join('');
+
+  const fmt = (v) => { v >>>= 0; return v > 0xFFFF ? hex(v) : String(v); };
+  function setCell(el, text) { if (el.textContent !== text) { el.textContent = text; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } }
+
+  function render(quiet) {
+    const idx = core.pc >>> 2;
+    listing.querySelectorAll('li').forEach((li, i) => li.classList.toggle('pc', i === idx));
+    const cur = listing.children[idx];
+    if (cur && !quiet) { const lt = listing.scrollTop, top = cur.offsetTop - listing.offsetTop; if (top < lt + 20 || top > lt + listing.clientHeight - 40) listing.scrollTop = top - listing.clientHeight / 2; }
+    $('cyc').textContent = `cycle ${core.cycles} · pc ${hex(core.pc, 3)}${core.halted ? ' · halted' : ''}`;
+    REGS.forEach((r) => setCell($('x' + r), fmt(core.x[r])));
+    DMEM_NOTES.forEach((_, i) => setCell($('m' + i), fmt(core.dmem[i])));
+    const c = core.cfu;
+    $('cA').textContent = `op_a ${fmt(c.a)}`; $('cB').textContent = `op_b ${fmt(c.b)}`; $('cF').textContent = `fn ${c.fn}`;
+    $('cR').textContent = `→ ${fmt(core.load(0xF000000C))}`;
+    $('slotName').textContent = VAR[core.variant].name;
+    const ans = $('ans'), done = core.cycles > (build === '62m5' ? 13 : 12);   // word 4 is written by instruction 12
+    const t = done ? String(core.dmem[4]) : '–';
+    if (ans.textContent !== t) { ans.textContent = t; ans.classList.add('flip'); setTimeout(() => ans.classList.remove('flip'), 260); }
+    $('ansWhat').textContent = VAR[core.variant].w4;
+    $('ansNote').textContent = VAR[core.variant].note;
+  }
+
+  function showStages(e) {
+    if (!e) { ['sF', 'sD', 'sE', 'sW'].forEach((id) => ($(id).textContent = '–')); return; }
+    const m = e.asm.split(/\s+/)[0];
+    $('sF').textContent = `pc ${hex(e.pc, 3)} → ${hex(e.word)}`;
+    $('sD').textContent = e.asm;
+    let ex = { add: 'ALU add', sub: 'ALU sub', addi: 'ALU add imm', lui: 'imm << 12', jal: 'pc ← pc (halt loop)', nop: build === '62m5' ? 'idle · result_q ← result' : 'idle' }[m] || '';
+    if (e.mem) ex = `address ${hex(e.mem.addr)}` + (e.mem.addr >= 0xF0000000 ? ' · CFU' : '');
+    if (e.mem && e.mem.kind === 'cfu-read' && build === '62m5') ex += ' · result_q';
+    $('sE').textContent = ex;
+    let wb = '–';
+    if (e.mem && e.mem.kind === 'dmem') wb = `mem[${e.mem.addr >>> 2}] ← ${fmt(core.dmem[e.mem.addr >>> 2])}`;
+    else if (e.mem && e.mem.kind === 'cfu') wb = `CFU ${['op_a', 'op_b', 'fn (start)'][(e.mem.addr - 0xF0000000) >>> 2]} ← ${fmt([core.cfu.a, core.cfu.b, core.cfu.fn][(e.mem.addr - 0xF0000000) >>> 2])}`;
+    else if (e.rd) wb = `x${e.rd} ← ${fmt(core.x[e.rd])}` + (e.mem ? ' (CFU result)' : '');
+    $('sW').textContent = wb;
+    const st = $('stages'); st.classList.remove('tick'); void st.offsetWidth; st.classList.add('tick');
+  }
+
+  function step() { if (core.halted) return false; showStages(core.step()); render(); return !core.halted; }
+  function stop() { clearInterval(running); running = null; $('run').textContent = 'Run'; }
+  function speed() { return +$('speed').value; }
+
+  $('step').onclick = () => { stop(); step(); };
+  $('run').onclick = () => {
+    if (running) return stop();
+    if (core.halted) { core.reset(); render(); }
+    $('run').textContent = 'Pause';
+    const tick = () => { if (!step()) stop(); };
+    running = setInterval(tick, 1000 / speed());
+  };
+  $('speed').oninput = () => { $('speedV').textContent = speed() + '/s'; if (running) { stop(); $('run').click(); } };
+  $('reset').onclick = () => { stop(); core.reset(); showStages(null); render(); };
+  $('toEnd').onclick = () => { stop(); let last = null; while (!core.halted) last = core.step(); showStages(last); render(); };
+
+  // ---------- floorplan ----------
+  const svg = $('fp');
+  const el = (tag, attrs, parent = svg) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); parent.appendChild(n); return n; };
+  // PS on the left, PL as 2 × 3 clock regions; the Pblock sits in X1Y1 (SLICE_X92Y50:X99Y99 + DSP48_X3Y20:Y39)
+  el('rect', { x: 8, y: 20, width: 96, height: 250, rx: 6, fill: 'var(--grid)', stroke: 'var(--line)' });
+  el('text', { x: 56, y: 132, 'text-anchor': 'middle', 'font-size': 13, 'font-weight': 600, fill: 'var(--ink)' }).textContent = 'PS7';
+  el('text', { x: 56, y: 150, 'text-anchor': 'middle', 'font-size': 10, fill: 'var(--muted)' }).textContent = 'dual Cortex-A9';
+  el('text', { x: 56, y: 164, 'text-anchor': 'middle', 'font-size': 10, fill: 'var(--muted)' }).textContent = 'PCAP · FCLK0';
+  const PL = { x: 116, y: 20, w: 276, h: 250 };
+  el('rect', { x: PL.x, y: PL.y, width: PL.w, height: PL.h, rx: 6, fill: 'var(--panel)', stroke: 'var(--line)' });
+  for (let c = 0; c < 46; c++) el('rect', { x: PL.x + 6 + c * 5.85, y: PL.y + 6, width: 2.2, height: PL.h - 12, fill: 'var(--grid)' });
+  const rh = PL.h / 3;
+  el('line', { x1: PL.x + PL.w / 2, y1: PL.y, x2: PL.x + PL.w / 2, y2: PL.y + PL.h, stroke: 'var(--line)', 'stroke-dasharray': '4 4' });
+  [1, 2].forEach((i) => el('line', { x1: PL.x, y1: PL.y + i * rh, x2: PL.x + PL.w, y2: PL.y + i * rh, stroke: 'var(--line)', 'stroke-dasharray': '4 4' }));
+  [['X0Y2', 0, 0], ['X1Y2', 1, 0], ['X0Y1', 0, 1], ['X1Y1', 1, 1], ['X0Y0', 0, 2], ['X1Y0', 1, 2]].forEach(([t, cx, cy]) =>
+    el('text', { x: PL.x + cx * PL.w / 2 + 6, y: PL.y + cy * rh + 13, 'font-size': 9, fill: 'var(--muted)' }).textContent = t);
+  // static logic
+  el('rect', { x: PL.x + 22, y: PL.y + rh + 18, width: 140, height: 80, rx: 4, fill: 'var(--static-soft)', stroke: 'var(--static)' });
+  el('text', { x: PL.x + 32, y: PL.y + rh + 40, 'font-size': 12, 'font-weight': 600, fill: 'var(--static)' }).textContent = 'static region';
+  ['RV32I core · regfile', 'imem · dmem', 'AXI GPIO readout'].forEach((t, i) =>
+    el('text', { x: PL.x + 32, y: PL.y + rh + 58 + i * 15, 'font-size': 10.5, fill: 'var(--ink)' }).textContent = t);
+  // AXI path PS -> static
+  el('path', { d: `M104 ${PL.y + rh + 60} H${PL.x + 22}`, stroke: 'var(--static)', 'stroke-width': 1.5, fill: 'none', 'stroke-dasharray': '3 3' });
+  // the Pblock: one clock region tall, 8 slice columns + 1 DSP column wide
+  const PB = { x: PL.x + 172, y: PL.y + rh, w: 48, h: rh };
+  el('rect', { x: PB.x, y: PB.y, width: PB.w, height: PB.h, fill: 'var(--rp-soft)' });
+  const fill = el('g', {});
+  const COLS = 24;
+  const cols = [];
+  for (let i = 0; i < COLS; i++) cols.push(el('rect', { x: PB.x + i * (PB.w / COLS), y: PB.y, width: PB.w / COLS - 0.4, height: PB.h, fill: 'var(--rp)', opacity: 0.85 }, fill));
+  el('rect', { x: PB.x, y: PB.y, width: PB.w, height: PB.h, fill: 'none', stroke: 'var(--rp)', 'stroke-width': 2 });
+  el('path', { d: `M${PL.x + 162} ${PB.y + PB.h / 2 + 10} H${PB.x}`, stroke: 'var(--rp)', 'stroke-width': 1.5, fill: 'none' });
+  const pbLabel = el('text', { x: PB.x + PB.w / 2, y: PB.y - 8, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 600, fill: 'var(--rp)' });
+  el('text', { x: PB.x + PB.w / 2, y: PB.y + PB.h + 14, 'text-anchor': 'middle', 'font-size': 9.5, fill: 'var(--muted)' }).textContent = 'pblock_cfu';
+  const frameText = el('text', { x: PB.x + PB.w / 2, y: PB.y + PB.h + 27, 'text-anchor': 'middle', 'font-size': 9.5, fill: 'var(--muted)', 'font-family': 'var(--mono)' });
+  // PCAP path PS -> Pblock, lit during a swap
+  const pcap = el('path', { d: `M104 ${PL.y + 60} H${PB.x + PB.w / 2} V${PB.y}`, stroke: 'var(--rp)', 'stroke-width': 2, fill: 'none', 'stroke-dasharray': '5 4', opacity: 0.25 });
+  el('text', { x: 180, y: PL.y + 54, 'font-size': 9.5, fill: 'var(--muted)' }).textContent = 'PCAP → configuration frames';
+
+  function paintSlot() {
+    pbLabel.textContent = core.variant === 'multiplier' ? 'mul · 81 LUT · 4 DSP' : 'bitwise · 75 LUT · 0 DSP';
+    frameText.textContent = '111,105 B ≈ 275 frames';
+    cols.forEach((c) => c.setAttribute('opacity', 0.85));
+    $('swap').textContent = `Swap to ${VAR[other(core.variant)].short}`;
+  }
+
+  async function streamFrames() {
+    pcap.setAttribute('opacity', 1);
+    cols.forEach((c) => c.setAttribute('opacity', 0.12));
+    const dur = reduced ? 0 : 1250;   // ≈ 500 × the 2.5 ms driver swap
+    const t0 = performance.now();
+    await new Promise((res) => {
+      const f = (now) => {
+        const p = dur ? Math.min(1, (now - t0) / dur) : 1, n = Math.floor(p * COLS);
+        cols.forEach((c, i) => c.setAttribute('opacity', i < n ? 0.85 : 0.12));
+        frameText.textContent = `frame ${Math.round(p * 275)} / ≈275`;
+        p < 1 ? requestAnimationFrame(f) : res();
+      };
+      requestAnimationFrame(f);
+    });
+    pcap.setAttribute('opacity', 0.25);
+  }
+
+  function setReset(on) {
+    const p = $('corePill');
+    p.className = 'pill ' + (on ? 'rst' : 'run');
+    p.textContent = on ? 'core held in reset' : 'core running';
+  }
+
+  // ---------- swap ----------
+  $('swap').onclick = async () => {
+    if (busy) return;
+    busy = true; epoch++; stop();
+    const to = other(core.variant), before = core.dmem[4];
+    lockUI(true);
+    const path = $('pathPynq').checked ? 'pynq' : 'driver';
+    const board = live ? api(`api/swap?to=${to}&path=${path}`, 'POST').catch((e) => ({ error: String(e) })) : null;
+
+    if (!board) drawTimeline(MODEL(path), 'model');
+    setReset(true); core.reset(); showStages(null); render(true);
+    $('swapMsg').textContent = `Streaming the ${VAR[to].short} partial bitstream into the Pblock…`;
+    await streamFrames();
+    core.variant = to; paintSlot(); render(true);
+    await sleep(reduced ? 0 : 250);
+    setReset(false);
+    $('swapMsg').textContent = 'Reset released. Same program, rerunning…';
+    while (!core.halted) { showStages(core.step()); render(true); await sleep(reduced ? 0 : 22); }
+    $('swapMsg').textContent = `Word 4 went from ${before} to ${core.dmem[4]}. Nothing outside the Pblock was reconfigured.`;
+
+    if (board) showBoard(await board, to);
+    lockUI(false);
+    busy = false;
+  };
+
+  // ---------- live board ----------
+  function showBoard(r, to) {
+    const box = $('boardRes');
+    $('boardBox').hidden = false;
+    if (r.phases) drawTimeline(r.phases, 'board');
+    refreshSession();
+    if (r.error) { box.className = 'boardres bad'; box.textContent = `The board did not answer: ${r.error}. The simulation above is still correct. Rerun the server cell in the notebook.`; return; }
+    const probed = !r.words;   // b3 with a user program loaded: verified by the slot probe (42 = multiplier, 2 = bitwise), not by the baked program's words
+    const w = r.words || {}, agree = probed ? r.probe === (to === 'multiplier' ? 42 : 2) : [0, 1, 4, 5, 8, 9].every((k) => w[k] === core.dmem[k]);
+    box.className = 'boardres' + (agree && !r.retried ? '' : ' bad');   // amber for a mismatch, and for a swap that needed recovering
+    const via = r.path === 'pynq' ? 'PYNQ Python API' : 'kernel driver';
+    box.innerHTML = (r.recovery === 'full'
+      ? `<div><strong>The slot ignored the partial; a full reload recovered it (${(r.total_ms || r.ms).toFixed(0)} ms in all)</strong> <span class="muted">(${via}; the ignored load itself took ${r.ms.toFixed(2)} ms)</span></div>`
+      : `<div><strong>Board swapped in ${r.ms.toFixed(2)} ms</strong> <span class="muted">(${via}${r.retried ? ', after a re-read' : ''})</span></div>`) +
+      (probed ? `<span class="mono">slot probe: 6 · 7 through fn 0 = ${r.probe}</span>` : `<span class="mono">word 4 = ${w[4]} · word 5 = ${w[5]} · word 9 = ${fmt(w[9])}</span>`) +
+      `<span>${agree ? (probed ? 'The probe names the unit that was loaded.' : 'The readback matches the simulation.') : 'The readback does NOT match the simulation. Swap again; the re-download recovers it.'}</span>`;
+    const li = document.createElement('li');
+    li.textContent = `→ ${to.padEnd(10)} ${r.ms.toFixed(2).padStart(7)} ms  ${r.path.padEnd(6)} ${probed ? 'probe=' + r.probe : 'w4=' + w[4]} ${agree ? 'ok' : 'MISMATCH'}`;
+    $('log').prepend(li);
+  }
+
+  let epoch = 0;   // bumped by every build switch, so a probe that started before it cannot undo it
+  async function probe() {
+    const mine = epoch, fresh = () => !busy && mine === epoch;
+    try {
+      live = await api('api/status', 'GET', nbKernel() ? 20000 : 1500);
+      if (live.error) throw new Error(live.error);
+    } catch { live = null; }
+    const m = $('mode');
+    m.classList.toggle('live', !!live);
+    if (live) {
+      $('modeText').textContent = `Live · PYNQ-Z2 · FCLK0 ${live.fclk_mhz.toFixed(1)} MHz`;
+      $('pathBox').hidden = false;
+      if (!fresh()) { setTimeout(probe, 1000); return; }   // something changed the board since this probe began: look again once it settles
+      try {
+        const bl = await api('api/builds');
+        if (!fresh()) { setTimeout(probe, 1000); return; }   // the board changed while we were asking
+        document.querySelectorAll('input[name=build]').forEach((i) => {
+          const info = bl.builds.find((x) => x.id === i.value);
+          i.disabled = !info || !info.available;
+          i.parentElement.title = i.disabled ? 'This bundle is not on the board' : '';
+          if (fresh()) i.checked = i.value === bl.active;
+        });
+        if (fresh() && bl.active !== build) { build = core.build = bl.active; buildListing(); paintBuild(); core.reset(); core.run(); paintSlot(); render(true); }
+      } catch { /* an older board_server without /api/builds: stay on the build the page opened with */ }
+      if (fresh() && live.variant !== core.variant) { core.variant = live.variant; core.reset(); core.run(); paintSlot(); render(); }
+      pollSys(); refreshSession();
+      if (!sysTimer) sysTimer = setInterval(() => { if (!document.hidden) pollSys(); }, 5000);
+    } else { $('modeText').textContent = 'Simulation · timings measured on the board'; drawSys(null); }
+  }
+
+  // ---------- chart (log scale, build B2, run 2) ----------
+  const DATA = [['PYNQ Python API', 585, 62.4], ['Kernel driver + DMA', 66.3, 2.56], ['PCAP bandwidth limit', 10.1, 0.278]];
+  const ch = $('chart'), X0 = 52, X1 = 548, Y0 = 212, Y1 = 14, lo = -1, hi = 3;
+  const y = (v) => Y0 - (Math.log10(v) - lo) / (hi - lo) * (Y0 - Y1);
+  const cEl = (tag, attrs, text) => { const n = el(tag, attrs, ch); if (text != null) n.textContent = text; return n; };
+  [0.1, 1, 10, 100, 1000].forEach((v) => {
+    cEl('line', { x1: X0, x2: X1, y1: y(v), y2: y(v), stroke: 'var(--grid)' });
+    cEl('text', { x: X0 - 8, y: y(v) + 4, 'text-anchor': 'end' }, v >= 1 ? `${v} ms` : `${v}`);
+  });
+  const gw = (X1 - X0) / 3;
+  DATA.forEach(([label, full, part], i) => {
+    const cx = X0 + gw * i + gw / 2, bw = 46;
+    [[full, cx - bw - 3, 'var(--line)'], [part, cx + 3, 'var(--rp)']].forEach(([v, x, color]) => {
+      cEl('rect', { x, y: y(v), width: bw, height: Y0 - y(v), fill: color, rx: 2 });
+      cEl('text', { x: x + bw / 2, y: y(v) - 5, 'text-anchor': 'middle', class: 'val' }, v < 1 ? v.toFixed(2) : String(v));
+    });
+    cEl('text', { x: cx, y: Y0 + 18, 'text-anchor': 'middle', 'font-size': 12, style: 'fill:var(--ink)' }, label);
+    cEl('text', { x: cx, y: Y0 + 33, 'text-anchor': 'middle' }, `${(full / part).toFixed(1)}× faster`);
+  });
+  cEl('line', { x1: X0, x2: X1, y1: Y0, y2: Y0, stroke: 'var(--muted)' });
+
+  // ---------- builds: B2 (50 MHz) and the 62.5 MHz registered-CFU build ----------
+  const BUILD_INFO = {
+    b2:     { mhz: 50,   hw: true,  note: 'The original build. 50 MHz read back on the board, 40 of 40 swaps verified by readback.' },
+    b3:     { mhz: 40,   hw: true, note: 'B2 plus a program loader: the PS can write instruction and data memory while the core is held in reset, and a cycle counter reads back how long a program ran. Same core, same slot, same 111 KB partial bitstreams. It runs at 40 MHz: with instruction memory writable, the load path is four asynchronous RAM reads in series (19.9 ns). Verified on the board on 31/10/2026 (40.0 MHz read back).' },
+    '62m5': { mhz: 62.5, hw: true,  note: 'The CFU result is registered in the static region, so software leaves one nop after each CFU start. Timing closes at 16 ns with 1.18 ns of slack. On the board: FCLK0 read back 62.5 MHz, 20 of 20 swaps verified, driver load median 2.8 ms.' },
+  };
+  const xh = () => { const x = (document.cookie.match(/(?:^|; )_xsrf=([^;]*)/) || [])[1]; return x ? { 'X-XSRFToken': x } : {}; };
+  // ---------- transport: HTTP when served by board_server.py; the notebook's own kernel when embedded in Jupyter ----------
+  const nbKernel = () => { try { return window.parent !== window && parent.Jupyter && parent.Jupyter.notebook && parent.Jupyter.notebook.kernel; } catch { return null; } };
+  function viaKernel(url, method, ms, body) {
+    return new Promise((resolve, reject) => {
+      let out = '';
+      const t = setTimeout(() => reject(new Error('the kernel did not answer')), ms);
+      nbKernel().execute(`bridge(${JSON.stringify(url)}, ${JSON.stringify(method)}${body === undefined ? '' : ', ' + JSON.stringify(JSON.stringify(body))})`, { iopub: { output: (m) => {
+        if (m.msg_type === 'stream') out += m.content.text;
+        else if (m.msg_type === 'error') { clearTimeout(t); reject(new Error(m.content.ename + ': ' + m.content.evalue)); return; }
+        const a = out.indexOf('@@JSON@@'), z = out.indexOf('@@END@@');
+        if (a >= 0 && z > a) { clearTimeout(t); try { resolve(JSON.parse(out.slice(a + 8, z))); } catch (e) { reject(e); } }
+      } } }, { silent: false });
+    });
+  }
+  async function api(url, method = 'GET', ms = 120000, body) {
+    if (nbKernel()) return viaKernel(url, method, ms, body);
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
+    try {
+      const hdr = method === 'POST' ? { ...xh(), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) } : {};
+      return await (await fetch(url, { method, headers: hdr, body: body === undefined ? undefined : JSON.stringify(body), signal: ctl.signal })).json();
+    } finally { clearTimeout(t); }
+  }
+  const tween = (node, from, to, f) => {
+    if (reduced || !window.Motion) { node.textContent = f(to); return; }
+    Motion.animate(from, to, { duration: 0.45, ease: [0.16, 1, 0.3, 1], onUpdate: (v) => (node.textContent = f(v)) });
+  };
+  // the program and video panels (second script) reuse this page's transport and slot state
+  window.RVDEMO = { api, isLive: () => !!live, variant: () => core.variant, busy: () => busy, build: () => build,
+                    swapClick: () => $('swap').click() };
+  let shownMhz = 50;
+  function paintBuild(extra) {
+    const bi = BUILD_INFO[build];
+    $('imemLbl').textContent = `imem · sw/program.hex (${RV.BUILDS[build].program.length} instructions${build === '62m5' ? ', one nop after each CFU start' : ''})`;
+    tween($('stClkV'), shownMhz, bi.mhz, (v) => (Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1)));
+    shownMhz = bi.mhz;
+    $('stClkSub').textContent = build === 'b2' ? 'core clock, read back from FCLK0'
+      : build === 'b3' ? 'core clock · timing met at 40 MHz' + (bi.hw ? ', read back from FCLK0' : '; not yet run on the board')
+      : 'core clock · timing met, 1.18 ns slack' + (bi.hw ? ', read back from FCLK0' : '; not yet run on the board');
+    $('buildNote').innerHTML = `<span class="tag ${bi.hw ? 'ok' : 'pend'}">${bi.hw ? '✓ verified on the board' : '… built, board run pending'}</span><span>${bi.note}</span>` + (extra || '');
+  }
+  function lockUI(on) { document.querySelectorAll('#step,#run,#reset,#toEnd,#swap,input[name=build]').forEach((b) => (b.disabled = on)); }
+  document.querySelectorAll('input[name=build]').forEach((i) => i.addEventListener('change', () => setBuild(i.value)));
+  async function setBuild(b) {
+    if (busy || b === build) return;
+    busy = true; epoch++; stop(); lockUI(true);
+    const prev = build;
+    let r = null;
+    if (live) {
+      $('buildNote').innerHTML = '<span class="tag pend">… switching</span><span>Loading the full bitstream onto the board (about 0.6 s) and reading the clock back.</span>';
+      r = await api(`api/build?b=${b}`, 'POST').catch((e) => ({ error: String(e) }));
+      if (r.error) {
+        document.querySelector(`input[name=build][value=${prev}]`).checked = true;
+        $('buildNote').innerHTML = `<span class="tag pend">board did not switch</span><span>${r.error}</span>`;
+        lockUI(false); busy = false; probe(); return;
+      }
+    }
+    build = core.build = b; core.variant = 'bitwise'; core.reset(); core.run();
+    buildListing(); showStages(null); paintSlot(); render(true);
+    paintBuild(r ? `<span class="tag ${r.clock_ok ? 'ok' : 'pend'}">${r.clock_ok ? '✓' : '!'} FCLK0 read back ${r.fclk_mhz.toFixed(1)} MHz${r.clock_ok ? '' : `, expected ${r.expected_mhz}`}</span>` : '');
+    lockUI(false); busy = false;
+    if (live) probe();
+  }
+
+  // ---------- swap timeline: measured phases from the board, or the board's median timings in simulation ----------
+  const PH = { reset: 'Reset held', load: 'Partial load', readback: 'Release + readback', 're-read': 'Re-read', 'full reload': 'Full reload' };
+  const phClass = (n) => 'ph-' + n.replace(' ', '-');
+  const MODEL = (path) => [{ name: 'reset', dur_ms: path === 'pynq' ? 0.1 : 0.07 }, { name: 'load', dur_ms: path === 'pynq' ? 62.4 : 2.54 }, { name: 'readback', dur_ms: 1.07 }];
+  const fmtMs = (v) => (v >= 100 ? v.toFixed(0) : v >= 1 ? v.toFixed(1) : v.toFixed(2)) + ' ms';
+  let tlTimer = null;
+  function drawTimeline(phases, src) {
+    const bar = $('tlBar'), total = phases.reduce((t, p) => t + p.dur_ms, 0) || 1;
+    bar.innerHTML = phases.map((p) => `<div class="ph ${phClass(p.name)}" style="flex:${Math.max(p.dur_ms, 0.001)} 1 0" title="${PH[p.name]}: ${fmtMs(p.dur_ms)}"></div>`).join('');
+    $('tlLegend').innerHTML = phases.map((p) => {
+      const pc = 100 * p.dur_ms / total;
+      return `<li><i class="${phClass(p.name)}"></i><span>${PH[p.name]}</span><b>${fmtMs(p.dur_ms)} · ${pc < 1 ? '<1' : pc.toFixed(0)} %</b></li>`;
+    }).join('');
+    $('tlTotal').textContent = `${fmtMs(total)} end to end`;
+    $('tlSrc').textContent = src === 'board' ? 'Last swap · each phase timed on the board' : 'Typical swap · the board\'s median timings';
+    bar.setAttribute('aria-label', phases.map((p) => `${PH[p.name]} ${fmtMs(p.dur_ms)}`).join(', '));
+    clearTimeout(tlTimer);
+    if (!reduced && window.anime) {
+      anime.remove('#tlBar .ph');
+      anime({ targets: '#tlBar .ph', scaleX: [0, 1], opacity: [0, 1], delay: anime.stagger(80), duration: 380, easing: 'easeOutExpo' });
+      // a paused tab never ticks the animation; leave the bar in its final state either way
+      tlTimer = setTimeout(() => bar.querySelectorAll('.ph').forEach((e) => { e.style.transform = ''; e.style.opacity = ''; }), 1400);
+    }
+  }
+
+  // ---------- reliability: the overnight soak ----------
+  const SOAK_FALLBACK = null;
+  const pctf = (v, d = 2) => (100 * v).toFixed(d) + ' %';
+  const overlaps = (rows) => rows.every((a) => rows.every((c) => a.lo <= c.hi && c.lo <= a.hi));
+  function drawSoak(sk) {
+    const body = $('relBody');
+    if (!sk) { body.innerHTML = '<div class="empty">No soak results loaded. Run <code>demo/soak_summary.py</code> on the soak log and put <code>soak/summary.json</code> beside the bitstreams; this panel reads it from <code>/api/soak</code>.</div>'; return; }
+    const groups = [['By direction', sk.by_direction], ['By load path', sk.by_path], ['By gap since the previous swap', sk.by_gap]];
+    const mx = Math.max(2, Math.ceil(100 * Math.max(...groups.flatMap(([, g]) => g.map((x) => x.hi)))));
+    const X = (v) => (100 * 100 * v / mx).toFixed(2);
+    const hours = sk.duration_s / 3600;
+    const span = hours < 1 ? `${Math.round(hours * 60)} min` : `${hours.toFixed(1)} h`;
+    $('relSrc').textContent = `${sk.swaps.toLocaleString()} swaps · ${span}`;
+    const rows = (g) => g.map((x) => `<div class="rrow"><span>${x.key}</span><div class="trk" style="--ax:${mx}"><i class="bar" style="width:${X(x.rate)}%"></i><i class="ci" style="left:${X(x.lo)}%;width:${X(x.hi - x.lo)}%"></i><i class="ref" style="left:${X(sk.rate)}%"></i></div><span class="mono">${pctf(x.rate)} · ${x.miss}/${x.n.toLocaleString()}</span></div>`).join('');
+    const ticks = Array.from({ length: mx + 1 }, (_, i) => `<span>${i} %</span>`).join('');
+    // strip: one mark per ignored swap along the soak's own clock
+    const W = 600, x0 = 8, x1 = 592, tx = (t) => x0 + (x1 - x0) * t / Math.max(sk.duration_s, 1);
+    const mins = sk.duration_s / 60, stepMin = [5, 10, 30, 60, 120].find((m) => mins / m <= 8) || 120;
+    let sv = `<svg viewBox="0 0 ${W} 54" role="img" aria-label="${sk.misses} ignored swaps along ${hours.toFixed(1)} hours of swapping"><line x1="${x0}" x2="${x1}" y1="32" y2="32" stroke="var(--line)"/>`;
+    for (let m = 0; m <= mins; m += stepMin) sv += `<line x1="${tx(m * 60)}" x2="${tx(m * 60)}" y1="32" y2="36" stroke="var(--muted)"/><text x="${tx(m * 60)}" y="48" text-anchor="middle">${m % 60 === 0 ? m / 60 + ' h' : m + ' min'}</text>`;
+    sv += sk.miss_times_s.map((t) => `<g><line x1="${tx(t)}" x2="${tx(t)}" y1="13" y2="32" stroke="var(--warn)" stroke-width="1.5"/><circle cx="${tx(t)}" cy="10" r="3.5" fill="var(--warn)" stroke="var(--panel)" stroke-width="1.5"/><title>ignored swap at ${(t / 60).toFixed(1)} min</title></g>`).join('') + '</svg>';
+    const table = groups.flatMap(([t, g]) => g.map((x) => `<tr><th>${t.replace('By ', '')} · ${x.key}</th><td class="num">${x.miss}/${x.n}</td><td class="num">${pctf(x.rate)}</td><td class="num">${pctf(x.lo)}–${pctf(x.hi)}</td></tr>`)).join('');
+    body.innerHTML = `<div class="relhead"><strong>${sk.misses} of ${sk.swaps.toLocaleString()} swaps were silently ignored (${pctf(sk.rate)})</strong>` +
+      `<span class="muted">95 % interval ${pctf(sk.ci95[0])} to ${pctf(sk.ci95[1])} · ${span} of continuous swapping · ${sk.full_reloads} needed a full reload · ${sk.unrecovered} never recovered</span></div>` +
+      (sk.incident ? `<div class="boardres bad"><strong>The soak ended early: a recovery failed outright.</strong><span>After ${sk.incident.after_full_reloads} successful full reloads, the next one was refused by the configuration engine (<code>PCFG_INIT</code> timeout, errno 110), which left the fabric unconfigured. This is a different, harder failure than a silently ignored swap.</span></div>` : '') +
+      groups.map(([t, g]) => `<div class="rb"><h3>${t}</h3>${rows(g)}</div>`).join('') +
+      `<div class="axis" aria-hidden="true">${ticks}</div>` +
+      `<div class="keyline"><span><i class="k-bar"></i>miss rate</span><span><i class="k-ci"></i>95 % interval</span><span><i class="k-ref"></i>overall rate</span></div>` +
+      `<div class="strip">${sv}</div><div class="keyline"><span><i class="k-miss"></i>a swap the slot ignored, along the soak's clock</span></div>` +
+      `<details class="tbl"><summary>Table view</summary><table><tbody>${table}</tbody></table></details>`;
+    if (!reduced && window.anime) {
+      anime({ targets: '#relBody .bar', scaleX: [0, 1], delay: anime.stagger(35), duration: 500, easing: 'easeOutExpo' });
+      setTimeout(() => body.querySelectorAll('.bar').forEach((e) => (e.style.transform = '')), 1500);
+    }
+    // the Q&A answer follows the data: only claim "no difference" where the intervals overlap
+    const flat = [['direction', sk.by_direction], ['load path', sk.by_path], ['gap between swaps', sk.by_gap]];
+    const same = flat.filter(([, g]) => overlaps(g)).map(([n]) => n), diff = flat.filter(([, g]) => !overlaps(g)).map(([n]) => n);
+    const dm = sk.driver_ms || {};
+    $('qaFail').textContent = `Yes. About 1 swap in ${Math.round(1 / sk.rate)} (${pctf(sk.rate)} over a ${sk.swaps.toLocaleString()}-swap soak) is silently ignored: the driver is given the right bitstream and reports success, but the slot keeps its old contents, and later partial loads are ignored too until the whole device is reloaded. ` +
+      `The soak found ${same.length ? 'no difference by ' + same.join(', ') + ' (the 95 % intervals overlap)' : 'a difference in every grouping'}${diff.length ? `, but did see one by ${diff.join(', ')}` : ''}` +
+      `${dm.hit_median && dm.miss_median ? `; a driver load took ${dm.hit_median.toFixed(2)} ms on a hit and ${dm.miss_median.toFixed(2)} ms on a miss` : ''}. ` +
+      `The board server checks every swap and, on a miss, reloads the full bitstream, and the result box says so. ` +
+      (sk.incident ? `In the soak, the ${sk.incident.after_full_reloads + 1}th of those reloads failed outright: the configuration engine stopped answering (its INIT line stayed low) and left the fabric unconfigured, so the recovery itself is a risk. ` : '') + `The root cause is still open.`;
+  }
+  async function refreshSession() {
+    try {
+      const d = await api('api/soak'), ss = d.session;
+      $('relLive').textContent = `This server session: ${ss.swaps} swap${ss.swaps === 1 ? '' : 's'}, ${ss.misses} ignored, ${ss.recoveries} recovered by a full reload.`;
+      return d;
+    } catch { $('relLive').textContent = 'Simulation: the model never misses. The fault is in the hardware, so only a live board can show it here.'; return null; }
+  }
+  async function loadSoak() { const d = await refreshSession(); drawSoak(d && d.soak ? d.soak : SOAK_FALLBACK); }
+
+  // ---------- the board right now ----------
+  let sysTimer = null, sysAt = 0;
+  async function pollSys() {
+    if (!live) return;
+    try { const r = await api('api/system'); if (r.error) throw new Error(r.error); drawSys(r); }
+    catch { $('sysAge').textContent = 'no answer'; }
+  }
+  const dur = (s) => (s >= 86400 ? `${Math.floor(s / 86400)} d ${Math.floor(s % 86400 / 3600)} h` : s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.floor(s % 3600 / 60)} min` : `${Math.floor(s / 60)} min`);
+  function drawSys(sy) {
+    const box = $('sysBody');
+    if (!sy) { $('sysAge').textContent = ''; box.innerHTML = '<div class="empty">Not connected to a board. Serve this page from the PYNQ-Z2 (<code>board_server.py</code>) and its clock, configuration state, load and busiest processes appear here.</div>'; return; }
+    const used = sy.mem_mb.MemTotal - sy.mem_mb.MemAvailable;
+    $('sysAge').textContent = 'updates every 5 s';
+    box.innerHTML = `<div class="sysgrid">` +
+      `<div><span class="label">Core clock</span><b>${sy.fclk_mhz.toFixed(1)} MHz</b></div>` +
+      `<div><span class="label">Configuration</span><b>${sy.fpga_state || '–'}</b></div>` +
+      `<div><span class="label">Build loaded</span><b>${{ '62m5': '62.5 MHz', b3: 'b3 · 40 MHz' }[sy.build] || 'B2 · 50 MHz'}</b></div>` +
+      `<div><span class="label">Uptime</span><b>${sy.uptime_s ? dur(sy.uptime_s) : '–'}</b></div>` +
+      `<div><span class="label">Load average</span><b>${sy.load.slice(0, 2).join(' ')}</b></div>` +
+      `<div><span class="label">Memory in use</span><b>${(used / 1024).toFixed(1)} / ${(sy.mem_mb.MemTotal / 1024).toFixed(1)} GB</b></div></div>` +
+      (sy.ips && sy.ips.length ? `<p class="muted" style="font-size:13px;margin-top:10px">Board address on this network: ${sy.ips.map((a) => `<span class="mono">${a}</span>`).join(', ')}</p>` : '') +
+      `<div class="label" style="margin:12px 0 4px">Busiest processes · ${sy.cores} cores · names only</div>` +
+      `<table><thead><tr><th>PID</th><th>Process</th><th class="num">CPU %</th><th class="num">Mem %</th></tr></thead><tbody>${sy.procs.map((p) => `<tr><th>${p.pid}</th><td>${p.name.replace(/[<>&]/g, '')}</td><td class="num">${p.cpu}</td><td class="num">${p.mem}</td></tr>`).join('')}</tbody></table>`;
+  }
+
+  // ---------- boot: open at the halted state so the page shows a real result ----------
+  core.run(); paintSlot(); render(true);
+  paintBuild(); drawTimeline(MODEL('driver'), 'model'); drawSys(null); loadSoak();
+  if (window.frameElement && window.ResizeObserver) new ResizeObserver(() => { window.frameElement.style.height = document.documentElement.scrollHeight + 'px'; }).observe(document.body);
+  probe();
+})();
+</script>
+<script>
+// panels.js -- "Run a program on the core" and "A video, decoded by the core" for index.html.
+// Everything here has two sources: the board (LIVE: /api/program, /api/run, /api/clip, /api/rick through the page's transport,
+// window.RVDEMO.api) and the page's own RV32I model (sim.js).  In LIVE mode every board result is also run through the model
+// and compared, word for word and cycle for cycle.
+(() => {
+  const A = window.APPS, D = window.RVDEMO, RVm = window.RV;
+  if (!A || !D || !RVm) return;
+  const $ = (id) => document.getElementById(id);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const hex = (v) => '0x' + (v >>> 0).toString(16);
+  const fmt = (v) => { v >>>= 0; return v > 0xFFFF ? hex(v) : String(v); };
+  const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const VARN = { multiplier: 'multiplier in the slot', bitwise: 'bitwise unit in the slot' };
+  $('usr').hidden = false;
+
+  // ----- model runs -----
+  function simRun(img, variant, inputs, read) {
+    const c = new RVm.Core(variant).loadProgram({ imem: img.imem, dmem: img.dmem || [] });
+    for (const [b, vals] of Object.entries(inputs || {})) vals.forEach((v, i) => c.poke(+b + i, v));
+    c.run(200000);
+    return { words: Array.from(c.dmem.subarray(read[0], read[0] + read[1])), cycles: c.cycles, halted: c.halted, fault: c.fault };
+  }
+  const post = (path, body) => D.api(path, 'POST', 120000, body);
+  const same = (board, sim) => board.cycles === sim.cycles && board.words.join() === sim.words.join();
+
+  // ----- program panel -----
+  const PROGS = [
+    { id: 'sum10', label: 'Assembly: sum 1 … 10 (editable)', kind: 'asm', text: A.asm.sum10.src },
+    ...(A.c.calc ? [{ id: 'calc', label: 'C: a × b and popcount(a)', kind: 'calc', text: A.c.calc.src, inputs: [['a', 6], ['b', 7]] }] : []),
+    ...(A.c.bench ? [{ id: 'bench', label: 'C: software multiply vs the slot', kind: 'bench', text: A.c.bench.src, inputs: [['n', 8]] }] : []),
+  ];
+  const sel = $('progSel');
+  sel.innerHTML = PROGS.map((p, i) => `<option value="${i}">${esc(p.label)}</option>`).join('');
+  const cur = () => PROGS[+sel.value];
+  function pick() {
+    const p = cur();
+    $('progSrcTxt').value = p.text; $('progSrcTxt').readOnly = p.kind !== 'asm';
+    $('progIn').innerHTML = (p.inputs || []).map(([k, v]) => `<label>${k} <input type="number" id="in_${k}" value="${v}" min="0" max="4294967295"></label>`).join('');
+    $('progOut').hidden = true;
+    $('progNote').textContent = {
+      asm: 'Assembled and written into the core\'s instruction memory by the PS while the core is held in reset, then released. The cycle count comes from a counter in the fabric.',
+      calc: 'The source is C. gcc has no multiply or popcount instruction for RV32I, so it calls library routines; here they send their operands to the slot. Swap the slot and run again: the same program gives different answers.',
+      bench: 'The same multiplications once with a software shift-and-add loop and once through the slot. With the bitwise unit loaded, * no longer multiplies.',
+    }[p.kind];
+  }
+  sel.onchange = pick; pick();
+
+  const where = (live) => (live ? 'On the board' : 'Simulation (this page\'s model)');
+  function show(html, bad) {
+    const o = $('progOut'); o.hidden = false; o.className = 'boardres prog-out' + (bad ? ' bad' : ''); o.innerHTML = html;
+  }
+  const row = (k, v) => `<tr><th>${k}</th><td>${v}</td></tr>`;
+  const agreeTxt = (ok, live) => (live ? (ok ? '<span>The board agrees with the model, word for word and cycle for cycle.</span>' : '<strong>The board does NOT match the model.</strong>') : '');
+
+  async function runProgram() {
+    const p = cur(), live = D.isLive(), v = D.variant(), btn = $('progRun');
+    rickPause(); btn.disabled = true;
+    try {
+      if (p.kind === 'asm') {
+        const src = $('progSrcTxt').value;
+        if (!live && src.trim() !== A.asm.sum10.src.trim()) return show('Editing assembly needs the board: it is assembled there (sw/rvasm.py). The unedited example runs in simulation.', true);
+        const read = [0, 4];
+        let board = null, imem = A.asm.sum10.imem;
+        if (live) {
+          board = await post('api/program', { src, name: 'asm', read });
+          if (board.error) return show(`<strong>${esc(board.error)}</strong>`, true);
+          imem = board.listing.map((l) => l[1]);
+        }
+        const sim = simRun({ imem }, v, {}, read), m = board || sim, ok = !board || same(board, sim);
+        show(`<div><strong>${where(live)}: ${m.halted ? 'halted' : 'did not halt'} after ${m.cycles} cycles</strong> <span class="muted">(${imem.length} instructions, ${VARN[v]})</span></div>` +
+          `<table>${[0, 1, 2, 3].map((i) => row(`mem[${i}]`, fmt(m.words[i]))).join('')}</table>` + agreeTxt(ok, live), !ok);
+      } else if (p.kind === 'calc') {
+        const a = +$('in_a').value >>> 0, b = +$('in_b').value >>> 0, read = [0, 4], inputs = { 64: [a, b] };
+        const img = A.c.calc;
+        const board = live ? await post('api/program', { imem: img.imem, dmem: img.dmem, name: 'calc', inputs, read }) : null;
+        if (board && board.error) return show(`<strong>${esc(board.error)}</strong>`, true);
+        const sim = simRun(img, v, inputs, read), m = board || sim, ok = !board || same(board, sim);
+        const exact = Math.imul(a, b) >>> 0, pc = a.toString(2).split('1').length - 1;
+        show(`<div><strong>${where(live)}: ${m.cycles} cycles · ${VARN[v]}</strong></div><table>` +
+          row(`${fmt(a)} × ${fmt(b)}`, `${fmt(m.words[0])} ${m.words[0] === exact ? '<span class="muted">(correct)</span>' : `<strong>(a real multiply gives ${fmt(exact)})</strong>`}`) +
+          row(`popcount(${fmt(a)})`, `${fmt(m.words[1])} ${m.words[1] === pc ? '<span class="muted">(correct)</span>' : `<strong>(the right answer is ${pc})</strong>`}`) +
+          row('a &amp; b', `${fmt(m.words[2])} <span class="muted">(plain RV32I, same either way)</span>`) + `</table>` + agreeTxt(ok, live), !ok);
+      } else {
+        const n = Math.max(1, Math.min(200, +$('in_n').value | 0)), img = A.c.bench, read = [0, 1];
+        const mk = (mode) => ({ 64: [n, 1000, 2000, mode] });
+        const out = [];
+        for (const mode of [0, 1]) {
+          const board = live ? await (mode === 0 ? post('api/program', { imem: img.imem, dmem: img.dmem, name: 'bench', inputs: mk(0), read }) : post('api/run', { inputs: mk(1), read })) : null;
+          if (board && board.error) return show(`<strong>${esc(board.error)}</strong>`, true);
+          const sim = simRun(img, v, mk(mode), read);
+          out.push({ m: board || sim, ok: !board || same(board, sim) });
+        }
+        const [soft, slot] = out, ok = out.every((o) => o.ok), agree = soft.m.words[0] === slot.m.words[0];
+        show(`<div><strong>${where(live)} · ${VARN[v]}</strong></div><table>` +
+          row('software loop', `${soft.m.cycles} cycles · checksum ${hex(soft.m.words[0])}`) +
+          row('through the slot', `${slot.m.cycles} cycles · checksum ${hex(slot.m.words[0])}`) + `</table>` +
+          (agree ? `<span>The slot takes <strong>${(soft.m.cycles / slot.m.cycles).toFixed(1)}× fewer cycles</strong> and gives the same answer.</span>`
+                 : `<strong>Different checksums: with the ${v} unit in the slot, * is not a multiply.</strong>`) + agreeTxt(ok, live), !ok);
+      }
+      $('progSrc').textContent = where(live);
+    } catch (e) { show(`<strong>${esc(e.message || e)}</strong>`, true); } finally { btn.disabled = false; }
+  }
+  $('progRun').onclick = runProgram;
+
+  // ----- video panel -----
+  const clip = A.clip, img = A.c.rick, W = 96, H = 64, PLANE = 192, FB = 576, CHUNK = 200;
+  const cv = $('rickCv'), ctx = cv.getContext('2d'), px = ctx.createImageData(W, H);
+  function draw(fb) {
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const o = 4 * (y * W + x), i = 3 * y + (x >> 5);
+      for (let c = 0; c < 3; c++) px.data[o + c] = (fb[c * PLANE + i] >>> (x & 31)) & 1 ? 240 : 10;
+      px.data[o + 3] = 255;
+    }
+    ctx.putImageData(px, 0, 0);
+  }
+  $('rickSrc').textContent = clip.test ? 'test pattern: encode a clip with sw/rick/encode.py' : `${clip.frames.length} frames · ${clip.fps} fps · 96 × 64 · 8 colours`;
+  const simCore = img ? new RVm.Core('bitwise').loadProgram(img) : null;
+  function simFrames(from, n, variant) {
+    const frames = [], cycles = [];
+    for (let i = 0; i < n && from + i < clip.frames.length; i++) {
+      const f = clip.frames[from + i];
+      simCore.variant = variant; let total = 0;
+      for (let k = 0; k < Math.max(1, f.p.length); k += 2 * CHUNK) {          // same chunks as the board: see sw/c/rick.c
+        const part = f.p.slice(k, k + 2 * CHUNK);
+        simCore.poke(FB, k === 0 ? f.c : 0); simCore.poke(FB + 1, part.length / 2); part.forEach((v, j) => simCore.poke(FB + 2 + j, v));
+        simCore.reset(true); simCore.run(100000); total += simCore.cycles;
+      }
+      frames.push(Array.from(simCore.dmem.subarray(0, FB))); cycles.push(total);
+    }
+    return { frames, cycles };
+  }
+  let playing = false, nextIdx = 0, buf = [], inflight = false, hold = false, tick = null, st = { cyc: 0, n: 0, ms: 0 };
+  const slotPill = () => {
+    const v = D.variant(), p = $('rickSlot');
+    p.textContent = v === 'bitwise' ? 'bitwise unit · fn 2 = XOR · picture decodes' : 'multiplier · fn 2 = a × b · picture breaks';
+    p.className = 'pill ' + (v === 'bitwise' ? 'run' : 'warn');
+  };
+  function info(extra) {
+    const live = D.isLive(), per = st.n ? Math.round(st.cyc / st.n) : null;
+    $('rickInfo').textContent = (live ? 'Decoded on the board' : 'Decoded by the page\'s model') + (per ? ` · ${per} clock cycles per frame` : '') +
+      (live && st.n ? ` · ${(st.ms / st.n).toFixed(0)} ms per frame including the AXI traffic` : '') + (extra ? ' · ' + extra : '');
+  }
+  async function ensureBoard() {
+    const s = await D.api('api/loader');
+    if (s.error || !s.available) throw new Error(s.error || 'this build has no program loader: switch to b3');
+    if (!s.program || s.program.name !== 'rick') { const r = await post('api/program', { imem: img.imem, dmem: img.dmem, name: 'rick', run: false }); if (r.error) throw new Error(r.error); }
+    if (s.clip_frames !== clip.frames.length) { const r = await post('api/clip', { frames: clip.frames }); if (r.error) throw new Error(r.error); }
+  }
+  async function pump() {
+    if (inflight || !playing || hold || buf.length >= 4) return;
+    inflight = true;
+    try {
+      const live = D.isLive(), n = 5; let r;
+      if (live) { r = await post(`api/rick?from=${nextIdx}&n=${n}`); if (r.error) throw new Error(r.error); }
+      else r = simFrames(nextIdx, n, D.variant());
+      buf.push(...r.frames); nextIdx = (nextIdx + r.frames.length) % clip.frames.length;
+      st.cyc += r.cycles.reduce((a, b) => a + b, 0); st.n += r.frames.length; st.ms += live ? r.ms : 0;
+    } catch (e) { rickPause(); info('stopped: ' + (e.message || e)); } finally { inflight = false; }
+  }
+  function rickPause() { playing = false; clearInterval(tick); tick = null; $('rickPlay').textContent = 'Play'; }
+  $('rickPlay').onclick = async () => {
+    if (playing) return rickPause();
+    if (!img) return info('rick.c is not built (no cross compiler)');
+    $('rickPlay').disabled = true;
+    try {
+      if (D.isLive()) await ensureBoard();
+      nextIdx = 0; buf = []; st = { cyc: 0, n: 0, ms: 0 };
+      if (!D.isLive()) simCore.reset();   // power-on state
+      playing = true; $('rickPlay').textContent = 'Pause'; slotPill();
+      tick = setInterval(() => { if (buf.length) draw(buf.shift()); pump(); info(buf.length ? '' : 'buffering'); }, 1000 / clip.fps);
+      pump();
+    } catch (e) { info(e.message || String(e)); } finally { $('rickPlay').disabled = false; }
+  };
+  $('rickSwap').onclick = async () => {
+    if (D.busy()) return;
+    hold = true; while (inflight) await sleep(20);
+    D.swapClick();                                  // the page's own swap: animation, and the real partial bitstream on the board
+    await sleep(150); while (D.busy()) await sleep(100);
+    hold = false; slotPill(); pump();
+  };
+  slotPill();
+  if (img) { draw(simFrames(0, 1, 'bitwise').frames[0]); simCore.reset(); }   // something on the canvas before Play
+  info();
+})();
+
+</script>
